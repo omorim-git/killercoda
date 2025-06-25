@@ -1,0 +1,27 @@
+{
+    "title": "PostgreSQL 接続数制限エラーを体験する",
+    "description": "PostgreSQLサーバの接続数制限により、接続エラーが発生する状況を再現します。",
+    "details": {
+      "steps": [
+        {
+          "title": "PostgreSQLサーバの準備と設定",
+          "text": "step1.md"
+        },
+        {
+          "title": "接続を大量に発生させてエラーを再現",
+          "text": "step2.md"
+        }
+      ],
+      "intro": {
+        "text": "intro.md"
+      }
+    },
+    "environment": {
+      "showide": true,
+      "idePort": 9090,
+      "uieditorpath": "/root"
+    },
+    "backend": {
+      "imageid": "ubuntu:22.04"
+    }
+  }
