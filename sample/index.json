@@ -6,7 +6,7 @@
         {
           "title": "PostgreSQLサーバの準備と設定",
           "text": "step1.md",
-          "background": "../background.sh"
+          "background": "background.sh"
         },
         {
           "title": "接続を大量に発生させてエラーを再現",
