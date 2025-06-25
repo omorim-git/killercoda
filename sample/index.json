@@ -24,5 +24,14 @@
     },
     "backend": {
       "imageid": "ubuntu"
+    },
+    "assets": {
+      "host01": [
+        {
+          "file": "connect_flood.py",
+          "target": "/root",
+          "chmod": "+x"
+        }
+      ]
     }
   }

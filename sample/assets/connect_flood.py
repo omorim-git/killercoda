@@ -1,18 +1,20 @@
-import psycopg2
-from time import sleep
+import subprocess
+import time
 
-connections = []
+print("Starting DB connection test using psql (persistent connections)...")
+processes = []
 
 for i in range(10):
     try:
-        conn = psycopg2.connect(
-            dbname="postgres",
-            user="testuser",
-            password="testpass",
-            host="localhost"
+        proc = subprocess.Popen(
+            ["psql", "-U", "testuser", "-h", "localhost", "-d", "postgres"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={"PGPASSWORD": "testpass"}
         )
-        connections.append(conn)
-        print(f"[OK] Connected #{i+1}")
-        sleep(1)
+        processes.append(proc)
+        print(f"[OK] Opened connection #{i+1}")
+        time.sleep(1)
     except Exception as e:
         print(f"[ERROR] Connection #{i+1} failed: {e}")
