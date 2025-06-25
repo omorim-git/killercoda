@@ -2,6 +2,10 @@
     "title": "PostgreSQL 接続数制限エラーを体験する",
     "description": "PostgreSQLサーバの接続数制限により、接続エラーが発生する状況を再現します。",
     "details": {
+      "intro": {
+        "text": "intro.md",
+        "background": "background.sh"
+      },
       "steps": [
         {
           "title": "PostgreSQLサーバの準備と設定",
@@ -12,26 +16,17 @@
           "text": "step2.md"
         }
       ],
-      "intro": {
-        "text": "intro.md",
-        "background": "background.sh"
+      "assets": {
+        "host01": [
+          {
+            "file": "connect_flood.py",
+            "target": "~/",
+            "chmod": "+x"
+          }
+        ]
       }
-    },
-    "environment": {
-      "showide": true,
-      "idePort": 9090,
-      "uieditorpath": "/root"
     },
     "backend": {
       "imageid": "ubuntu"
-    },
-    "assets": {
-      "host01": [
-        {
-          "file": "connect_flood.py",
-          "target": "/root",
-          "chmod": "+x"
-        }
-      ]
     }
   }
