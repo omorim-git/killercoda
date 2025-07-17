@@ -1,6 +1,6 @@
 {
-    "title": "Webキャッシュによるリンク切れエラーの再現",
-    "description": "Webページの旧バージョンがキャッシュされたことで、存在しないリンク先にアクセスして404エラーになるトラブルを再現します。",
+    "title": "Webページリンク切れエラーの再現",
+    "description": "更新したWebページのリンク先にアクセスして404エラーになるトラブルを再現します。",
     "details": {
       "intro": {
         "text": "intro.md",
@@ -16,24 +16,21 @@
         "text": "finish.md"
       },
       "assets": {
-      "host01": [
-        {
-          "file": "assets/index_before.html",
-          "target": "/var/www/html/index.html",
-          "chmod": "+r"
-        },
-        {
-          "file": "assets/subpage.html",
-          "target": "/var/www/html/subpage.html",
-          "chmod": "+r"
-        },
-        {
-          "file": "assets/index_after.html",
-          "target": "/opt/new_html/index.html",
-          "chmod": "+r"
-        }
-      ]
-    }
+        "host01": [
+            {
+            "file": "index_before.html",
+            "target": "/var/www/html/index.html"
+            },
+            {
+            "file": "subpage.html",
+            "target": "/var/www/html/subpage.html"
+            },
+            {
+            "file": "index_after.html",
+            "target": "~/"
+            }
+        ]
+      }
     },
     "backend": {
       "imageid": "ubuntu"

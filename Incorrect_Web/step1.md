@@ -13,7 +13,7 @@
 `/opt/new_html/` に更新用のHTMLが配置されています。以下のコマンドで更新してください。
 
 ```bash
-sudo mv /opt/new_html/index.html /var/www/html/index.html
+sudo cp ~/index_after.html /var/www/html/index.html
 sudo mv /var/www/html/subpage.html /var/www/html/subpage_updated.html
 ```{{copy}}
 
