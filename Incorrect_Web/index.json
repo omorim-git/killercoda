@@ -18,12 +18,12 @@
       "assets": {
         "host01": [
             {
-            "file": "index_before.html",
-            "target": "/var/www/html/index.html"
+            "file": "index.html",
+            "target": "/var/www/html/"
             },
             {
             "file": "subpage.html",
-            "target": "/var/www/html/subpage.html"
+            "target": "/var/www/html/"
             },
             {
             "file": "index_after.html",
