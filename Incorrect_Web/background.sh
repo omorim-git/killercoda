@@ -21,4 +21,4 @@ EOF
 # サーバ起動
 systemctl restart apache2
 # 準備完了表示
-echo "準備完了!"
+touch /tmp/background-finished

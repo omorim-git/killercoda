@@ -10,7 +10,7 @@
 
 ### Step 3: 🛠 資材を更新する
 
-`/opt/new_html/` に更新用のHTMLが配置されています。以下のコマンドで更新してください。
+`~/` に更新用のHTMLが配置されています。以下のコマンドで更新してください。
 
 ```bash
 sudo cp ~/index_after.html /var/www/html/index.html
