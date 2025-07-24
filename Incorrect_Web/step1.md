@@ -11,13 +11,12 @@
 
 ### Step 3: 🛠 資材を更新する
 
-`~/` に更新用のHTMLが配置されています。以下のコマンドで更新してください。
+`~/` に更新用のHTMLが配置されています。以下のコマンドで更新してください。（貼り付けはCtrl + Shift + V）
 
 ```bash
 sudo cp ~/index_after.html /var/www/html/index.html
 sudo mv /var/www/html/subpage.html ~/
-
-```{{exec}}
+```{{copy}}
 
 ### Step 4: ⚠ リンク先ページを更新してみよう
 
