@@ -27,6 +27,10 @@
             "target": "/var/www/html/"
             },
             {
+            "file": "subpage_updated.html",
+            "target": "/var/www/html/"
+            },
+            {
             "file": "index_after.html",
             "target": "~/"
             }

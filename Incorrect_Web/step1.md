@@ -15,7 +15,8 @@
 
 ```bash
 sudo cp ~/index_after.html /var/www/html/index.html
-sudo mv /var/www/html/subpage.html /var/www/html/subpage_updated.html
+sudo mv /var/www/html/subpage.html ~/
+
 ```{{exec}}
 
 ### Step 4: ⚠ リンク先ページを更新してみよう
