@@ -11,6 +11,10 @@
         {
           "title": "ページ表示と資材変更",
           "text": "step1.md"
+        },
+        {
+          "title": "ヒント",
+          "text": "step2.md"
         }
       ],
       "finish": {
