@@ -4,6 +4,7 @@
     "details": {
       "intro": {
         "text": "intro.md",
+        "foreground": "foreground.sh",
         "background": "background.sh"
       },
       "steps": [
@@ -19,11 +20,13 @@
         "host01": [
             {
             "file": "reset_db.sh",
-            "target": "~/"
+            "target": "~/",
+            "chmod": "+x"
             },
             {
             "file": "run.sh",
-            "target": "~/"
+            "target": "~/",
+            "chmod": "+x"
             }
         ]
       }

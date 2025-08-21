@@ -8,7 +8,16 @@ DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 
 # パスワードを PGPASSWORD に設定
-export PGPASSWORD="${PGPASSWORD:-postgres_pass}"
+PGPASS_FILE="$HOME/.pgpass"
+LINE="localhost:5432:*:postgres_user:postgres_pass"
+
+if ! grep -qF "$LINE" "$PGPASS_FILE" 2>/dev/null; then
+  echo "$LINE" >> "$PGPASS_FILE"
+  chmod 600 "$PGPASS_FILE"
+  echo "Added credentials to $PGPASS_FILE"
+else
+  echo ".pgpass already contains the entry"
+fi
 
 # psql 共通オプション
 PSQL_BASE=(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -v ON_ERROR_STOP=1 -X -q)
