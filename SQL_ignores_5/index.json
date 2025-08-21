@@ -19,7 +19,7 @@
       "assets": {
         "host01": [
             {
-            "file": "reset_db.sh",
+            "file": "init_db.sh",
             "target": "~/",
             "chmod": "+x"
             },
