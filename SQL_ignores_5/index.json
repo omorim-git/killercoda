@@ -1,0 +1,34 @@
+{
+    "title": "5だけ処理されない",
+    "description": "PostgreSQL処理で5だけ処理されないトラブルを再現します。",
+    "details": {
+      "intro": {
+        "text": "intro.md",
+        "background": "background.sh"
+      },
+      "steps": [
+        {
+          "title": "問題",
+          "text": "step1.md"
+        }
+      ],
+      "finish": {
+        "text": "finish.md"
+      },
+      "assets": {
+        "host01": [
+            {
+            "file": "reset_db.sh",
+            "target": "~/"
+            },
+            {
+            "file": "run.sh",
+            "target": "~/"
+            }
+        ]
+      }
+    },
+    "backend": {
+      "imageid": "ubuntu"
+    }
+  }
