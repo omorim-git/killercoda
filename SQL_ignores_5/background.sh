@@ -1,14 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
+# ====== 設定 ======
+DB_NAME="${DB_NAME:-data_db}"
+DB_USER="${DB_USER:-postgres_user}"
+DB_HOST="${DB_HOST:-localhost}"
+DB_PORT="${DB_PORT:-5432}"
+
 apt update && apt install -y postgresql > /dev/null 2>&1
-touch /tmp/before-start-postgresql
+
 systemctl start postgresql
-touch /tmp/before-createuser
 sudo -u postgres createuser postgres_user --createdb
-touch /tmp/before-alter-user
 sudo -u postgres psql -c "ALTER USER postgres_user WITH PASSWORD 'postgres_pass';"
-touch /tmp/before-restart-db
 systemctl restart postgresql
 
 PSQL_BASE=(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -v ON_ERROR_STOP=1 -X -q)
