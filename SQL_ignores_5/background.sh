@@ -1,14 +1,16 @@
 #!/bin/bash
+touch /tmp/start-background
 set -euo pipefail
 
 apt update && apt install -y postgresql > /dev/null 2>&1
-
+touch /tmp/before-start-postgresql
 systemctl start postgresql
 sudo -u postgres createuser postgres_user --createdb
 sudo -u postgres psql -c "ALTER USER postgres_user WITH PASSWORD 'postgres_pass';"
 systemctl restart postgresql
 
 PSQL_BASE=(psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -v ON_ERROR_STOP=1 -X -q)
+touch /tmp/before-createDB
 "${PSQL_BASE[@]}" -d postgres -c "CREATE DATABASE data_db;"
 
 # 準備完了表示
