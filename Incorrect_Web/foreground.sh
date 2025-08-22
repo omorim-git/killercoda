@@ -1,3 +1,2 @@
-echo '環境準備中のためお待ちください...'
-while [ ! -f /tmp/background-finished ]; do sleep 5; echo '環境準備中のためお待ちください...'; done
+while [ ! -f /tmp/background-finished ]; do echo '環境準備中のためお待ちください...'; sleep 5; done
 echo '準備完了!'

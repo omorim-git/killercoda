@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 
 apt update && apt install -y postgresql > /dev/null 2>&1
