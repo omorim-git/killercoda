@@ -23,6 +23,10 @@
             {
             "file": "app.js",
             "target": "~/"
+            },
+            {
+            "file": ".env",
+            "target": "~/"
             }
         ]
       }
