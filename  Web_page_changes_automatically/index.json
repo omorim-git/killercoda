@@ -1,6 +1,6 @@
 {
-    "title": "5だけ処理されない",
-    "description": "PostgreSQL処理で5だけ処理されないトラブルを再現します。",
+    "title": "Webページが勝手に変わる",
+    "description": "設定を変えたつもりがないのにWebページが変わるトラブルを再現します。",
     "details": {
       "intro": {
         "text": "intro.md",
@@ -21,14 +21,8 @@
       "assets": {
         "host01": [
             {
-            "file": "init_table.sh",
-            "target": "~/",
-            "chmod": "+x"
-            },
-            {
-            "file": "run.sh",
-            "target": "~/",
-            "chmod": "+x"
+            "file": "app.js",
+            "target": "~/"
             }
         ]
       }
