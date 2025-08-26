@@ -10,9 +10,13 @@ Webページを開いて本番環境のページ表示されることを確認�
 👉 [Webページを開く]({{TRAFFIC_HOST1_3000}})
 
 ### Step 3: bashから出る
-ctrl+cでWebページを終了し、以下のコマンドで起動中のbashから出て再びWebページを起動してください。
+ctrl + c でWebページを終了し、以下のコマンドで起動中のbashから出て
 ```bash
 exit
+```{{copy}}
+
+再びWebページを起動してください。
+```bash
 node app.js
 ```{{copy}}
 
