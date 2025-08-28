@@ -1,0 +1,33 @@
+{
+    "title": "中継サーバの性能劣化",
+    "description": "中継サーバ経由で接続するWebサーバへのアクセスが遅くなるトラブルを再現します。",
+    "details": {
+      "intro": {
+        "text": "intro.md",
+        "foreground": "foreground.sh"
+        
+        ,
+        "background": "background.sh"
+      },
+      "steps": [
+        {
+          "title": "問題",
+          "text": "step1.md"
+        }
+      ],
+      "finish": {
+        "text": "finish.md"
+      },
+      "assets": {
+        "host01": [
+            {
+            "file": "all-av.tmpl.yaml",
+            "target": "~/k8s/"
+            }
+        ]
+      }
+    },
+    "backend": {
+      "imageid": "kubernetes-kubeadm-2nodes"
+    }
+  }
