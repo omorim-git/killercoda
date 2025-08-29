@@ -21,7 +21,7 @@
       "assets": {
         "host01": [
             {
-            "file": "all-av.tmpl.yaml",
+            "file": "all-cpucheck.tmpl.yaml",
             "target": "~/k8s/"
             }
         ]
