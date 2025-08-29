@@ -26,8 +26,8 @@ spec:
           ports:
             - { containerPort: 3310 }
           resources:
-            requests: { cpu: "300m", memory: "512Mi" }
-            limits:   { cpu: "1500m", memory: "1024Mi" }
+            requests: { cpu: "300m", memory: "700Mi" }
+            limits:   { cpu: "1500m", memory: "1200Mi" }
           readinessProbe:
             tcpSocket: { port: 3310 }
             initialDelaySeconds: 10
