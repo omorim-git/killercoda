@@ -5,114 +5,7 @@ metadata:
   name: demo
 ---
 # =========================
-# ClamAV 設定（公式 1.x 用）
-# =========================
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: clamav-conf
-  namespace: demo
-data:
-  clamd.conf: |
-    LogTime yes
-    LogSyslog no
-    Foreground yes
-    TCPSocket 3310
-    TCPAddr 0.0.0.0
-    MaxThreads 2
-    SelfCheck 600
-    PidFile /run/clamav/clamd.pid
-    DatabaseDirectory /var/lib/clamav
-    TemporaryDirectory /tmp
-  freshclam.conf: |
-    LogTime yes
-    Foreground yes
-    DatabaseDirectory /var/lib/clamav
-    DatabaseMirror database.clamav.net
-    DNSDatabaseInfo current.cvd.clamav.net
-    Checks 12
----
-# =========================
-# ClamAV: clamd + freshclam（分離 & 初回DLは initContainer）
-# =========================
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: clamav
-  namespace: demo
-spec:
-  replicas: 1
-  selector: { matchLabels: { app: clamav } }
-  template:
-    metadata: { labels: { app: clamav } }
-    spec:
-      nodeSelector:
-        kubernetes.io/hostname: node01
-      volumes:
-        - name: db
-          emptyDir: {}
-        - name: run
-          emptyDir: {}
-        - name: conf
-          configMap: { name: clamav-conf }
-      initContainers:
-        - name: freshclam-init
-          image: clamav/clamav:1.4
-          securityContext: { runAsUser: 0 }
-          command:
-            - freshclam
-            - --config-file=/etc/clamav/freshclam.conf
-            - --verbose
-            - --foreground
-          volumeMounts:
-            - { name: db,  mountPath: /var/lib/clamav }
-            - { name: conf, mountPath: /etc/clamav/freshclam.conf, subPath: freshclam.conf }
-      containers:
-        - name: clamd
-          image: clamav/clamav:1.4
-          securityContext: { runAsUser: 0 }
-          command: [ "clamd","-F","--config-file=/etc/clamav/clamd.conf" ]
-          ports: [ { containerPort: 3310 } ]
-          volumeMounts:
-            - { name: db,  mountPath: /var/lib/clamav }
-            - { name: run, mountPath: /run/clamav }
-            - { name: conf, mountPath: /etc/clamav/clamd.conf, subPath: clamd.conf }
-          resources:
-            requests: { cpu: "300m", memory: "700Mi" }
-            limits:   { cpu: "1500m", memory: "1200Mi" }
-          readinessProbe:
-            tcpSocket: { port: 3310 }
-            initialDelaySeconds: 180
-            periodSeconds: 10
-            failureThreshold: 36
-          livenessProbe:
-            tcpSocket: { port: 3310 }
-            initialDelaySeconds: 300
-            periodSeconds: 10
-            failureThreshold: 18
-        - name: freshclam
-          image: clamav/clamav:1.4
-          securityContext: { runAsUser: 0 }
-          command: [ "freshclam","-d","-F","--config-file=/etc/clamav/freshclam.conf" ]
-          volumeMounts:
-            - { name: db,  mountPath: /var/lib/clamav }
-            - { name: conf, mountPath: /etc/clamav/freshclam.conf, subPath: freshclam.conf }
-          resources:
-            requests: { cpu: "100m", memory: "200Mi" }
-            limits:   { cpu: "500m", memory: "400Mi" }
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: clamav
-  namespace: demo
-spec:
-  selector: { app: clamav }
-  ports:
-    - { name: clamd, port: 3310, targetPort: 3310 }
----
-# =========================
-# Web (Flask)
+# Web (Flask) はそのまま
 # =========================
 apiVersion: apps/v1
 kind: Deployment
@@ -160,51 +53,69 @@ spec:
     - { name: http, port: 8080, targetPort: 8080 }
 ---
 # ==========================================
-# OpenResty (Nginx+Lua): AV スキャン + 計測（Server-Timing）
+# OpenResty（独自CPUチェック付き）Config
 # ==========================================
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: av-proxy-conf
+  name: cpu-proxy-conf
   namespace: demo
 data:
   nginx.conf: |
-    worker_processes  auto;
+    # “体感”を安定させるためワーカーは 1 に固定（同時チェックを作らない）
+    worker_processes 1;
     events { worker_connections 1024; }
     http {
       lua_socket_log_errors on;
       client_max_body_size 100m;
       client_body_buffer_size 8m;
       sendfile on; tcp_nopush on;
+      gzip off;
 
-      upstream app { server web.demo.svc.cluster.local:8080; keepalive 64; }
+      upstream app { server web.demo.svc.cluster.local:8080; keepalive 32; }
 
+      # ---- Lua 初期化（CPU負荷関数とチューニング値）
       init_by_lua_block {
-        function _read_cpu_ms()
-          local f=io.open("/sys/fs/cgroup/cpu.stat","r")
-          if f then
-            local txt=f:read("*a"); f:close()
-            local usec=txt:match("usage_usec%s+(%d+)")
-            if usec then return tonumber(usec)/1000.0 end
+        local function toint(name, def)
+          local v = tonumber(os.getenv(name) or ""); if not v then return def end
+          return math.floor(v)
+        end
+        CHECK_REQ_ROUNDS = toint("CHECK_REQ_ROUNDS", 600)   -- アップロード本文 1チャンク当たりの反復回数
+        CHECK_RES_ROUNDS = toint("CHECK_RES_ROUNDS", 200)   -- 応答本文 1チャンク当たりの反復回数
+        -- 簡易 CPU 負荷：MD5 を rounds 回多重反復（LuaJIT でそこそこ重い）
+        function _burn_md5(data, rounds)
+          local h = data
+          for i=1, rounds do
+            h = ngx.md5(h)
           end
-          local g=io.open("/sys/fs/cgroup/cpu/cpuacct.usage","r")
-          if g then local ns=g:read("*n"); g:close(); if ns then return ns/1e6 end end
-          return nil
+          return h
         end
         function _last_num(s) if not s or s=="" then return 0 end
           local m=s:match("([%d%.]+)$"); return tonumber(m) or 0 end
+        end
       }
 
       server {
         listen 80; server_name _;
 
+        # リクエスト開始時刻
         access_by_lua_block {
           ngx.ctx.t0 = ngx.now()
-          ngx.ctx.cpu0 = _read_cpu_ms()
+          ngx.ctx.check_ms = 0.0
         }
 
+        # ---- 全ルート共通: 応答本文を処理するたびに“軽め”にCPU燃焼
+        body_filter_by_lua_block {
+          local chunk = ngx.arg[1]
+          if chunk and #chunk > 0 and CHECK_RES_ROUNDS > 0 then
+            local t = ngx.now()
+            _burn_md5(chunk, CHECK_RES_ROUNDS)
+            ngx.ctx.check_ms = (ngx.ctx.check_ms or 0) + (ngx.now()-t)*1000.0
+          end
+        }
+
+        # ---- Server-Timing（ヘッダ時点）
         header_filter_by_lua_block {
-          if ngx.var.uri == "/download" then return end
           local now   = ngx.now()
           local total = now - (ngx.ctx.t0 or now)
           local c  = _last_num(ngx.var.upstream_connect_time)
@@ -214,59 +125,42 @@ data:
           local ttfb_up   = math.max(0, h - c)  * 1000.0
           local upbody_ms = math.max(0, r - h)  * 1000.0
           local upstream_ms = (c + (h-c) + (r-h)) * 1000.0
-          local avscan_ms = ngx.ctx.avscan_ms or 0
-          local cpu1 = _read_cpu_ms()
-          local proxy_cpu = 0
-          if cpu1 and ngx.ctx.cpu0 and cpu1 >= ngx.ctx.cpu0 then proxy_cpu = cpu1 - ngx.ctx.cpu0 end
           local proxy_total = math.max(0, (total*1000.0) - upstream_ms)
+          local check_ms = ngx.ctx.check_ms or 0.0  -- ※アップロード前段のチェックは access で加算
+
           local parts = {
             string.format("conn;dur=%.1f", conn_ms),
             string.format("ttfb_up;dur=%.1f", ttfb_up),
             string.format("upbody;dur=%.1f", upbody_ms),
-            string.format("proxy_cpu;dur=%.1f", proxy_cpu),
+            string.format("check_cpu;dur=%.1f", check_ms),
             string.format("proxy_total;dur=%.1f", proxy_total),
           }
-          if avscan_ms > 0 then table.insert(parts, string.format("avscan;dur=%.1f", avscan_ms)) end
-          local prev = ngx.header["Server-Timing"]
-          local add  = table.concat(parts, ", ")
-          ngx.header["Server-Timing"] = prev and (prev .. ", " .. add) or add
+          ngx.header["Server-Timing"] = table.concat(parts, ", ")
         }
 
-        # ===== アップロード: INSTREAM スキャン（avscan_ms を計測） =====
+        # ====== アップロード: 本文を読み込み→CPUチェック→本文を復元して転送 ======
         location = /upload {
           lua_need_request_body on;
           access_by_lua_block {
-            local function be4(n)
-              local b1=math.floor(n/16777216)%256; local b2=math.floor(n/65536)%256
-              local b3=math.floor(n/256)%256; local b4=n%256
-              return string.char(b1,b2,b3,b4)
+            ngx.req.read_body()
+            local t = ngx.now()
+            local data = ngx.req.get_body_data()
+            local file = ngx.req.get_body_file()
+            if data then
+              if CHECK_REQ_ROUNDS > 0 then _burn_md5(data, CHECK_REQ_ROUNDS) end
+              ngx.req.set_body_data(data)   -- 後段に渡すため復元
+            elseif file then
+              local f = io.open(file, "rb")
+              if f then
+                while true do
+                  local chunk = f:read(65536); if not chunk then break end
+                  if CHECK_REQ_ROUNDS > 0 then _burn_md5(chunk, CHECK_REQ_ROUNDS) end
+                end
+                f:close()
+                ngx.req.set_body_file(file, true)
+              end
             end
-            local function scan_body_with_clamav()
-              ngx.req.read_body()
-              local t = ngx.now()
-              local sock = ngx.socket.tcp(); sock:settimeout(60000)
-              local ok, err = sock:connect("clamav.demo.svc.cluster.local", 3310)
-              if not ok then ngx.log(ngx.ERR,"clamd connect failed:",err); return ngx.exit(503) end
-              sock:send("INSTREAM\0")
-              local data = ngx.req.get_body_data()
-              local file = ngx.req.get_body_file()
-              if data then sock:send(be4(#data)); sock:send(data)
-              elseif file then
-                local f=io.open(file,"rb")
-                while true do local chunk=f:read(65536); if not chunk then break end
-                  sock:send(be4(#chunk)); sock:send(chunk)
-                end; f:close()
-              else sock:send(be4(0)) end
-              sock:send(be4(0))
-              local res=sock:receive("*l"); sock:close()
-              if not res then return ngx.exit(503) end
-              if string.find(res,"FOUND") then return ngx.exit(403) end
-              ngx.ctx.avscan_ms = (ngx.now()-t)*1000.0
-              if data then ngx.req.set_body_data(data)
-              elseif file then ngx.req.set_body_file(file, true) end
-            end
-            local ok, perr = pcall(scan_body_with_clamav)
-            if not ok then ngx.log(ngx.ERR,"scan/upload error:",perr); return ngx.exit(503) end
+            ngx.ctx.check_ms = (ngx.ctx.check_ms or 0) + (ngx.now()-t)*1000.0
           }
           proxy_pass http://app;
           proxy_http_version 1.1;
@@ -277,63 +171,7 @@ data:
           proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ===== ダウンロード: 上流読み + INSTREAM スキャン（計測付き） =====
-        location = /download {
-          content_by_lua_block {
-            local http = require "resty.http"
-            local function be4(n)
-              local b1=math.floor(n/16777216)%256; local b2=math.floor(n/65536)%256
-              local b3=math.floor(n/256)%256; local b4=n%256
-              return string.char(b1,b2,b3,b4)
-            end
-            local t0 = ngx.now()
-            local cpu0 = _read_cpu_ms() or 0
-
-            local httpc=http.new(); httpc:set_timeout(60000)
-            local ok, err = httpc:connect("web.demo.svc.cluster.local", 8080)
-            if not ok then ngx.status=502; ngx.say("upstream connect error"); return end
-            local path="/download"; if ngx.var.args and #ngx.var.args>0 then path=path.."?"..ngx.var.args end
-            local res, rerr = httpc:request({ method="GET", path=path, headers={ Host="web.demo.svc.cluster.local" } })
-            if not res then ngx.status=502; ngx.say("upstream request error"); return end
-
-            local sock=ngx.socket.tcp(); sock:settimeout(120000)
-            local ok2, err2 = sock:connect("clamav.demo.svc.cluster.local",3310)
-            if not ok2 then ngx.status=503; ngx.say("clamd connect error"); return end
-            sock:send("INSTREAM\0")
-
-            local reader=res.body_reader
-            local chunks,total={},0
-            local up_t0=ngx.now()
-            while true do
-              local chunk, cerr = reader(65536)
-              if cerr then ngx.log(ngx.ERR,"read err:",cerr); break end
-              if not chunk then break end
-              sock:send(be4(#chunk)); sock:send(chunk)
-              chunks[#chunks+1]=chunk; total=total+#chunk
-            end
-            local up_ms=(ngx.now()-up_t0)*1000.0
-            sock:send(be4(0))
-            local verdict=sock:receive("*l"); sock:close()
-            if not verdict then ngx.status=503; ngx.say("clamd read error"); return end
-            if string.find(verdict,"FOUND") then ngx.status=403; ngx.say("blocked by AV"); return end
-
-            local cpu1=_read_cpu_ms() or cpu0
-            local proxy_cpu=math.max(0, cpu1 - cpu0)
-            local proxy_total=math.max(0, (ngx.now()-t0)*1000.0 - up_ms)
-            local avscan_ms=math.max(0, proxy_total)  # ダウンロードは中継処理の大半がスキャン
-
-            ngx.header["Server-Timing"]=string.format(
-              "upbody;dur=%.1f, avscan;dur=%.1f, proxy_cpu;dur=%.1f, proxy_total;dur=%.1f",
-              up_ms, avscan_ms, proxy_cpu, proxy_total)
-
-            ngx.header["Content-Type"]=res.headers["Content-Type"] or "application/octet-stream"
-            ngx.header["Content-Length"]=tostring(total)
-            for i=1,#chunks do ngx.print(chunks[i]) end
-            ngx.eof()
-          }
-        }
-
-        # 通常プロキシ（/page 等）
+        # ====== その他（ダウンロード/通常ページ）はそのままプロキシ ======
         location / {
           proxy_pass http://app;
           proxy_http_version 1.1;
@@ -351,20 +189,23 @@ data:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: reverse-proxy-av
+  name: reverse-proxy-cpu
   namespace: demo
 spec:
   replicas: 2
-  selector: { matchLabels: { app: reverse-proxy-av } }
+  selector: { matchLabels: { app: reverse-proxy-cpu } }
   template:
-    metadata: { labels: { app: reverse-proxy-av } }
+    metadata: { labels: { app: reverse-proxy-cpu } }
     spec:
       nodeSelector:
-        kubernetes.io/hostname: node01
+        kubernetes.io/hostname: node01   # Webはcontrolplane、プロキシはnode01 など分けてもOK
       containers:
         - name: openresty
           image: ${OR_IMAGE}
           imagePullPolicy: Always
+          env:
+            - { name: CHECK_REQ_ROUNDS, value: "600" }  # ↑↓調整ポイント（大きいほどCPUを使う）
+            - { name: CHECK_RES_ROUNDS, value: "200" }
           ports: [ { containerPort: 80 } ]
           volumeMounts:
             - name: conf
@@ -379,19 +220,19 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:
-            requests: { cpu: "100m", memory: "128Mi" }
-            limits:   { cpu: "1000m", memory: "256Mi" }
+            requests: { cpu: "100m", memory: "64Mi" }
+            limits:   { cpu: "1000m", memory: "192Mi" }
       volumes:
         - name: conf
-          configMap: { name: av-proxy-conf }
+          configMap: { name: cpu-proxy-conf }
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: reverse-proxy-av
+  name: reverse-proxy-cpu
   namespace: demo
 spec:
-  selector: { app: reverse-proxy-av }
+  selector: { app: reverse-proxy-cpu }
   type: NodePort
   ports:
     - { name: http, port: 80, targetPort: 80, nodePort: 30080 }
