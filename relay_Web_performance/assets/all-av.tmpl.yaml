@@ -25,13 +25,15 @@ data:
     DatabaseDirectory /var/lib/clamav
     TemporaryDirectory /tmp
   freshclam.conf: |
-    DatabaseOwner clamav
-    UpdateLogFile /dev/stdout
+    LogTime yes
+    Foreground yes
     DatabaseDirectory /var/lib/clamav
+    DatabaseMirror database.clamav.net
+    DNSDatabaseInfo current.cvd.clamav.net
     Checks 12
 ---
 # =========================
-# ClamAV: clamd + freshclam（分離）
+# ClamAV: clamd + freshclam（分離 & 初回DLは initContainer）
 # =========================
 apiVersion: apps/v1
 kind: Deployment
@@ -48,16 +50,29 @@ spec:
         kubernetes.io/hostname: node01
       volumes:
         - name: db
-          emptyDir: {}      # DBキャッシュ（再起動短縮）
+          emptyDir: {}
         - name: run
           emptyDir: {}
         - name: conf
           configMap: { name: clamav-conf }
+      initContainers:
+        - name: freshclam-init
+          image: clamav/clamav:1.4
+          securityContext: { runAsUser: 0 }
+          command:
+            - freshclam
+            - --config-file=/etc/clamav/freshclam.conf
+            - --verbose
+            - --foreground
+          volumeMounts:
+            - { name: db,  mountPath: /var/lib/clamav }
+            - { name: conf, mountPath: /etc/clamav/freshclam.conf, subPath: freshclam.conf }
       containers:
         - name: clamd
           image: clamav/clamav:1.4
-          command: ["clamd","-F","--config-file=/etc/clamav/clamd.conf"]
-          ports: [{ containerPort: 3310 }]
+          securityContext: { runAsUser: 0 }
+          command: [ "clamd","-F","--config-file=/etc/clamav/clamd.conf" ]
+          ports: [ { containerPort: 3310 } ]
           volumeMounts:
             - { name: db,  mountPath: /var/lib/clamav }
             - { name: run, mountPath: /run/clamav }
@@ -77,7 +92,8 @@ spec:
             failureThreshold: 18
         - name: freshclam
           image: clamav/clamav:1.4
-          command: ["freshclam","-d","-F","--config-file=/etc/clamav/freshclam.conf"]
+          securityContext: { runAsUser: 0 }
+          command: [ "freshclam","-d","-F","--config-file=/etc/clamav/freshclam.conf" ]
           volumeMounts:
             - { name: db,  mountPath: /var/lib/clamav }
             - { name: conf, mountPath: /etc/clamav/freshclam.conf, subPath: freshclam.conf }
@@ -110,7 +126,7 @@ spec:
     metadata: { labels: { app: web } }
     spec:
       nodeSelector:
-        node-purpose: web   # controlplane に付与したラベルを想定
+        node-purpose: web
       tolerations:
         - { key: "node-role.kubernetes.io/control-plane", operator: "Exists", effect: "NoSchedule" }
         - { key: "node-role.kubernetes.io/master",        operator: "Exists", effect: "NoSchedule" }
@@ -118,8 +134,8 @@ spec:
         - name: web
           image: ${WEB_IMAGE}
           imagePullPolicy: Always
-          ports: [{ containerPort: 8080 }]
-          env: [{ name: PYTHONUNBUFFERED, value: "1" }]
+          ports: [ { containerPort: 8080 } ]
+          env: [ { name: PYTHONUNBUFFERED, value: "1" } ]
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
             initialDelaySeconds: 3
@@ -144,8 +160,7 @@ spec:
     - { name: http, port: 8080, targetPort: 8080 }
 ---
 # ==========================================
-# OpenResty (Nginx+Lua) : AV スキャン + 計測
-#  Server-Timing: conn / ttfb_up / upbody / avscan / proxy_cpu / proxy_total
+# OpenResty (Nginx+Lua): AV スキャン + 計測（Server-Timing）
 # ==========================================
 apiVersion: v1
 kind: ConfigMap
@@ -164,7 +179,6 @@ data:
 
       upstream app { server web.demo.svc.cluster.local:8080; keepalive 64; }
 
-      # cgroup CPU時間を取得する簡易関数
       init_by_lua_block {
         function _read_cpu_ms()
           local f=io.open("/sys/fs/cgroup/cpu.stat","r")
@@ -184,13 +198,11 @@ data:
       server {
         listen 80; server_name _;
 
-        # リクエスト開始記録
         access_by_lua_block {
           ngx.ctx.t0 = ngx.now()
           ngx.ctx.cpu0 = _read_cpu_ms()
         }
 
-        # 通常経路の Server-Timing（/downloadはcontent_by_lua側で付与）
         header_filter_by_lua_block {
           if ngx.var.uri == "/download" then return end
           local now   = ngx.now()
@@ -220,7 +232,7 @@ data:
           ngx.header["Server-Timing"] = prev and (prev .. ", " .. add) or add
         }
 
-        # ====== アップロード: INSTREAM スキャン（avscan_ms を計測） ======
+        # ===== アップロード: INSTREAM スキャン（avscan_ms を計測） =====
         location = /upload {
           lua_need_request_body on;
           access_by_lua_block {
@@ -265,7 +277,7 @@ data:
           proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ====== ダウンロード: 上流読み + INSTREAM スキャン（計測付き） ======
+        # ===== ダウンロード: 上流読み + INSTREAM スキャン（計測付き） =====
         location = /download {
           content_by_lua_block {
             local http = require "resty.http"
@@ -308,7 +320,7 @@ data:
             local cpu1=_read_cpu_ms() or cpu0
             local proxy_cpu=math.max(0, cpu1 - cpu0)
             local proxy_total=math.max(0, (ngx.now()-t0)*1000.0 - up_ms)
-            local avscan_ms=math.max(0, proxy_total)  -- ダウンロードは中継処理の大半がスキャン
+            local avscan_ms=math.max(0, proxy_total)  # ダウンロードは中継処理の大半がスキャン
 
             ngx.header["Server-Timing"]=string.format(
               "upbody;dur=%.1f, avscan;dur=%.1f, proxy_cpu;dur=%.1f, proxy_total;dur=%.1f",
@@ -353,7 +365,7 @@ spec:
         - name: openresty
           image: ${OR_IMAGE}
           imagePullPolicy: Always
-          ports: [{ containerPort: 80 }]
+          ports: [ { containerPort: 80 } ]
           volumeMounts:
             - name: conf
               mountPath: /usr/local/openresty/nginx/conf/nginx.conf
