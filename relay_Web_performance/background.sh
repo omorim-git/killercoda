@@ -7,7 +7,7 @@ export OR_IMAGE="ghcr.io/${OWNER}/openresty-av:0.1"
 
 kubectl label node controlplane node-purpose=web --overwrite
 export WEB_IMAGE OR_IMAGE
-# envsubst '${WEB_IMAGE} ${OR_IMAGE}' < k8s/all-av.tmpl.yaml | kubectl apply -f -
+# envsubst '${WEB_IMAGE} ${OR_IMAGE}' < k8s/all-cpucheck.tmpl.yaml | kubectl apply -f -
 
 # kubectl -n demo rollout status deploy/clamav
 # kubectl -n demo rollout status deploy/web

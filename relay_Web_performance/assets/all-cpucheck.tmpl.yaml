@@ -91,7 +91,7 @@ data:
           return h
         end
         function _last_num(s) if not s or s=="" then return 0 end
-          local m=s:match("([%d%.]+)$"); return tonumber(m) or 0 end
+          local m=s:match("([%d%.]+)$"); return tonumber(m) or 0
         end
       }
 
