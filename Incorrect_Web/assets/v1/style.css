@@ -1,0 +1,59 @@
+/* v1: ダークテーマ（シアン系アクセント） */
+:root{
+  --bg:#1e1e1e;
+  --fg:#e0e0e0;
+  --muted:#bdbdbd;
+  --panel:#2b2b2b;
+  --border:#4a4a4a;
+  --accent:#4fc3f7;     /* v1 アクセント（シアン） */
+  --badge:#263238;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--fg);
+  font:16px/1.6 system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  padding:2rem 1.5rem;
+}
+
+header h1{
+  margin:0 0 1rem;
+  color:var(--accent);
+  font-size:1.6rem;
+  display:flex; align-items:center; gap:.6rem;
+}
+.badge{
+  display:inline-block;
+  background:var(--badge);
+  border:1px solid var(--border);
+  color:var(--accent);
+  padding:.1rem .5rem;
+  border-radius:.5rem;
+  font-size:.9rem;
+}
+
+main p{color:var(--muted); margin:.5rem 0 1rem}
+ol{margin:.25rem 0 1.25rem 1.25rem}
+
+#panel{
+  margin-top:1rem;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:.75rem;
+  padding:1rem;
+}
+#version-info{
+  font-weight:700;
+  color:#ffcc80;
+  margin-bottom:.5rem;
+}
+#time-info{
+  color:var(--muted);
+  font-size:.9rem;
+}
+
+footer{margin-top:2rem; color:var(--muted); font-size:.85rem}
+code{background:#333;padding:.1rem .3rem;border-radius:.3rem;border:1px solid #444}

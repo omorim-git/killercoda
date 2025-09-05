@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>資材更新デモ (v1)</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <header>
+    <h1>資材更新デモ <span class="badge">v1</span></h1>
+  </header>
+
+  <main>
+    <p>このページは <strong>資材更新</strong> 用デモです。</p>
+    <ol>
+      <li>まずはこのページを開き、下のバージョン表示を確認。</li>
+      <li><code>deploy-v2.sh</code> を実行して v2 をデプロイ。</li>
+      <li>「F5」キーでリロードして、ダークテーマからライトテーマに変わり、jsバージョンが変わることを確認しましょう。</li>
+    </ol>
+
+    <section id="panel">
+      <div id="version-info" aria-live="polite">読み込み中…</div>
+      <div id="time-info"></div>
+      <noscript style="color:#ff8a80;">JavaScript が無効です。app.js のバージョン表示は行えません。</noscript>
+    </section>
+  </main>
+
+  <footer>
+    <small>© Demo. Cache-Control: assets は <code>max-age=31536000, immutable</code> / HTML は <code>no-cache</code></small>
+  </footer>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>

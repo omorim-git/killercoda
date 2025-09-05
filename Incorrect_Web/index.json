@@ -23,20 +23,33 @@
       "assets": {
         "host01": [
             {
-            "file": "index.html",
-            "target": "/var/www/html/"
+            "file": "v1/index.html",
+            "target": "/var/www/demo/"
             },
             {
-            "file": "subpage.html",
-            "target": "/var/www/html/"
+            "file": "v1/style.css",
+            "target": "/var/www/demo/"
             },
             {
-            "file": "subpage_updated.html",
-            "target": "/var/www/html/"
+            "file": "v1/app.js",
+            "target": "/var/www/demo/"
             },
             {
-            "file": "index_after.html",
-            "target": "~/"
+            "file": "v2/index.html",
+            "target": "/opt/kc-assets/v2/"
+            },
+            {
+            "file": "v2/style.css",
+            "target": "/opt/kc-assets/v2/assets/"
+            },
+            {
+            "file": "v2/app.js",
+            "target": "/opt/kc-assets/v2/assets/"
+            },
+            {
+            "file": "deploy-v2.sh",
+            "target": "~/",
+            "chmod": "+x"
             }
         ]
       }
