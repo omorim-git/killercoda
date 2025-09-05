@@ -1,24 +1,74 @@
 #!/bin/bash
+echo "[INFO] Updating apt sources to use mirrors.edge.kernel.org..."
 
-# Apacheをインストール
-apt update && apt install -y apache2 > /dev/null 2>&1
-echo OK
+# バックアップを保存
+sudo cp /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak.$(date +%s)
 
-# mod_headers を有効化
-a2enmod headers
+# コードネーム取得 (例: noble, jammy)
+CODENAME=$(lsb_release -sc)
+ARCH=$(dpkg --print-architecture)
 
-# .htaccess を有効にするために AllowOverride を変更（必要に応じてバックアップ）
-sed -i 's/AllowOverride None/AllowOverride All/' /etc/apache2/apache2.conf
+# ubuntu.sources を置き換え
+sudo tee /etc/apt/sources.list.d/ubuntu.sources > /dev/null <<EOF
+Types: deb
+URIs: http://mirrors.edge.kernel.org/ubuntu
+Suites: $CODENAME $CODENAME-updates $CODENAME-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
-# Cache-Control を設定する .htaccess を作成
-cat <<EOF > /var/www/html/.htaccess
-<IfModule mod_headers.c>
-  <FilesMatch "\.(html|css|js)$">
-    Header set Cache-Control "public, max-age=3600"
-  </FilesMatch>
-</IfModule>
+Types: deb
+URIs: http://mirrors.edge.kernel.org/ubuntu
+Suites: $CODENAME-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 EOF
-# サーバ起動
-systemctl restart apache2
+
+echo "[INFO] Running apt-get update..."
+sudo apt-get update -y
+
+echo "[INFO] Installing nginx..."
+sudo apt-get install -y nginx
+
+echo "[INFO] Configuring nginx demo site..."
+
+# デモ用ディレクトリ
+sudo mkdir -p /var/www/demo/assets
+
+# Nginx 設定
+sudo tee /etc/nginx/sites-available/demo > /dev/null <<'NGINX'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    root /var/www/demo;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # キャッシュ設定
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+}
+NGINX
+
+# 有効化
+sudo ln -sf /etc/nginx/sites-available/demo /etc/nginx/sites-enabled/default
+
+# 構文テスト & リロード
+echo "[INFO] Testing nginx configuration..."
+sudo nginx -t
+echo "[INFO] Reloading nginx..."
+sudo systemctl reload nginx
+
+# 自動起動
+sudo systemctl enable nginx
 # 準備完了表示
 touch /tmp/background-finished

@@ -10,7 +10,7 @@
 以下のコマンドで資材をv2に更新してください。（貼り付けはCtrl + Shift + V）
 
 ```bash
-./deploy-v2.sh
+~/deploy-v2.sh
 ```{{copy}}
 
 ### Step 3: ⚠ リンク先ページを更新してみよう

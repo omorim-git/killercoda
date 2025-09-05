@@ -28,11 +28,11 @@
             },
             {
             "file": "v1/style.css",
-            "target": "/var/www/demo/"
+            "target": "/var/www/demo/assets/"
             },
             {
             "file": "v1/app.js",
-            "target": "/var/www/demo/"
+            "target": "/var/www/demo/assets/"
             },
             {
             "file": "v2/index.html",
