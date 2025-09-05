@@ -1,12 +1,12 @@
-/* v2: ダークテーマ（アクセントをライム系に変更して差分を明確化） */
+/* v2: ライトテーマ（ブルー系アクセント） */
 :root{
-  --bg:#141414;          /* v1より少し暗め */
-  --fg:#e8e8e8;
-  --muted:#c7c7c7;
-  --panel:#222;
-  --border:#444;
-  --accent:#9ccc65;      /* v2 アクセント（ライム） */
-  --badge:#1b1b1b;
+  --bg:#fdfdfd;          /* 白背景 */
+  --fg:#212121;          /* 黒文字 */
+  --muted:#555555;       /* 補助テキスト */
+  --panel:#ffffff;       /* カード背景 */
+  --border:#cccccc;      /* 枠線 */
+  --accent:#1976d2;      /* v2 アクセント（ブルー） */
+  --badge:#eeeeee;
 }
 
 *{box-sizing:border-box}
@@ -42,11 +42,11 @@ main p{color:var(--muted); margin:.5rem 0 1rem}
   border:1px solid var(--border);
   border-radius:.75rem;
   padding:1rem;
-  box-shadow: 0 0 0 1px #2e2e2e inset;
+  box-shadow:0 1px 3px rgba(0,0,0,0.1);
 }
 #version-info{
   font-weight:700;
-  color:#ffd54f; /* 少し色味を変える */
+  color:#d32f2f; /* 赤系で強調 */
   margin-bottom:.5rem;
 }
 #time-info{
@@ -54,4 +54,4 @@ main p{color:var(--muted); margin:.5rem 0 1rem}
   font-size:.9rem;
 }
 footer{margin-top:2rem; color:var(--muted); font-size:.85rem}
-code{background:#2b2b2b;padding:.1rem .3rem;border-radius:.3rem;border:1px solid #3a3a3a}
+code{background:#f5f5f5;padding:.1rem .3rem;border-radius:.3rem;border:1px solid #e0e0e0}
