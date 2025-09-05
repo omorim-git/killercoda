@@ -35,5 +35,3 @@ echo "[INFO] Reloading Nginx..."
 sudo systemctl reload nginx
 
 echo "[INFO] v2 deployed."
-echo "Open the site and try: normal reload (should still show old assets due to strong cache),"
-echo "then hard reload (Ctrl+Shift+R / Cmd+Shift+R) to see v2 on screen."
