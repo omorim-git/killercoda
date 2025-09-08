@@ -39,12 +39,5 @@ cat <<EOF
 
 EOF
 
-echo "[6/6] Schedule CPU hog start (in 120s)"
-(
-  sleep 120
-  echo "[*] Starting CPU hog (replicas=1) on hotspot node…"
-  kubectl -n latency-demo scale deploy/cpu-hog --replicas=1
-) &
-
 echo "セットアップ完了。ブラウザでフロントにアクセスしてリクエストを送ってください。"
 
