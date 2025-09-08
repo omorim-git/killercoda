@@ -105,7 +105,7 @@ data:
         async function sendUpload() {
           status.textContent = '1MiB 送信中…';
           const start = performance.now();
-          const blob = new Blob([randomBytes(1024 * 1024)], { type: 'application/octet-stream' });
+          const blob = new Blob([randomBytes(900 * 1024)], { type: 'application/octet-stream' }); // 900KiB
           const res = await fetch('/api/upload', {
             method: 'POST',
             body: blob
