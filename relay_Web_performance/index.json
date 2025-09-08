@@ -13,8 +13,7 @@
         },
         {
           "title": "トラブル発生",
-          "text": "step2.md",
-          "foreground": "step2/setup.sh"
+          "text": "step2.md"
         }
       ],
       "finish": {
