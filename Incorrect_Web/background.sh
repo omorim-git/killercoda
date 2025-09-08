@@ -9,7 +9,7 @@ CODENAME=$(lsb_release -sc)
 ARCH=$(dpkg --print-architecture)
 
 # ubuntu.sources を置き換え
-sudo sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.iitd.ac.in/ubuntu/|g' \
+sudo sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.iitd.ac.in/ubuntu|g' \
     /etc/apt/sources.list.d/ubuntu.sources
 
 echo "[INFO] Running apt-get update..."
