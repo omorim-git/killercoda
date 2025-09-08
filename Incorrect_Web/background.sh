@@ -11,13 +11,13 @@ ARCH=$(dpkg --print-architecture)
 # ubuntu.sources を置き換え
 sudo tee /etc/apt/sources.list.d/ubuntu.sources > /dev/null <<EOF
 Types: deb
-URIs: http://mirrors.edge.kernel.org/ubuntu
+URIs: http://mirrors.iitd.ac.in/ubuntu/
 Suites: $CODENAME $CODENAME-updates $CODENAME-backports
 Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
 
 Types: deb
-URIs: http://mirrors.edge.kernel.org/ubuntu
+URIs: http://security.ubuntu.com/ubuntu
 Suites: $CODENAME-security
 Components: main restricted universe multiverse
 Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
