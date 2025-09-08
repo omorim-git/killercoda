@@ -84,15 +84,22 @@ data:
             body
           });
           const json = await res.json();
-          json.total_elapsed_ms = Math.round(performance.now() - start);
+          const clientTotal = Math.round(performance.now() - start);
+          const netEst = Math.max(clientTotal - json.relay_time_ms - json.backend_time_ms, 0);
+          json.total_elapsed_ms = clientTotal;
+          json.network_time_ms = netEst;
           addRow(json);
           status.textContent = '';
         }
 
         function randomBytes(size) {
-          const arr = new Uint8Array(size);
-          crypto.getRandomValues(arr);
-          return arr;
+          const out = new Uint8Array(size);
+          const CHUNK = 65536; // getRandomValues の上限
+          for (let i = 0; i < size; i += CHUNK) {
+            const end = Math.min(i + CHUNK, size);
+            crypto.getRandomValues(out.subarray(i, end));
+          }
+          return out;
         }
 
         async function sendUpload() {
@@ -101,11 +108,13 @@ data:
           const blob = new Blob([randomBytes(1024 * 1024)], { type: 'application/octet-stream' });
           const res = await fetch('/api/upload', {
             method: 'POST',
-            headers: { 'X-Upload-Type': 'blob' },
             body: blob
           });
           const json = await res.json();
-          json.total_elapsed_ms = Math.round(performance.now() - start);
+          const clientTotal = Math.round(performance.now() - start);
+          const netEst = Math.max(clientTotal - json.relay_time_ms - json.backend_time_ms, 0);
+          json.total_elapsed_ms = clientTotal;
+          json.network_time_ms = netEst;
           addRow(json);
           status.textContent = '';
         }
