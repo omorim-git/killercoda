@@ -5,9 +5,6 @@
       "intro": {
         "text": "intro.md",
         "foreground": "foreground.sh"
-        
-        ,
-        "background": "background.sh"
       },
       "steps": [
         {
@@ -21,8 +18,8 @@
       "assets": {
         "host01": [
             {
-            "file": "all-cpucheck.tmpl.yaml",
-            "target": "~/k8s/"
+            "file": "*",
+            "target": "/etc/kc_relay_web"
             }
         ]
       }

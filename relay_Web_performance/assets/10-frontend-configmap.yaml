@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-static
+  namespace: latency-demo
+data:
+  index.html: |
+    <!doctype html>
+    <html lang="ja">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Latency Demo</title>
+      <style>
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 24px auto; }
+        h1 { margin-bottom: 0.25rem; }
+        .desc { color: #555; margin-bottom: 1rem; }
+        button { padding: .6rem 1rem; margin-right: .5rem; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { border: 1px solid #ddd; padding: .5rem; font-variant-numeric: tabular-nums; }
+        th { background: #fafafa; text-align: left; }
+        .ok { color: #0a7; }
+        .warn { color: #d70; }
+      </style>
+    </head>
+    <body>
+      <h1>CPU 競合レイテンシデモ</h1>
+      <div class="desc">
+        ルート: ユーザ(このページ) → 中継サーバ → Webアプリ。<br/>
+        中継サーバで CPU チェック処理を行い、途中で同ノードに CPU 100% のホグコンテナを起動します。<br/>
+        下のボタンで通常/大容量(1MiB) リクエストを送ると、各サーバ処理時間と推定ネットワーク時間が記録されます。
+      </div>
+
+      <div>
+        <button id="btn-normal">通常リクエスト</button>
+        <button id="btn-upload">1MiB アップロード</button>
+        <span id="status"></span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>リクエスト時刻</th>
+            <th>種別</th>
+            <th>リクエスト内容</th>
+            <th>中継サーバ(ms)</th>
+            <th>Webアプリ(ms)</th>
+            <th>ネットワーク推定(ms)</th>
+            <th>合計往復(ms)</th>
+          </tr>
+        </thead>
+        <tbody id="log"></tbody>
+      </table>
+
+      <script>
+        const relayPort = 30081; // Relay NodePort（固定）
+        const relayBase = `http://${window.location.hostname}:${relayPort}`;
+
+        const logBody = document.getElementById('log');
+        const status = document.getElementById('status');
+        let counter = 0;
+
+        function addRow(d) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${++counter}</td>
+            <td>${d.request_timestamp}</td>
+            <td>${d.request_type}</td>
+            <td>${d.request_info}</td>
+            <td>${d.relay_time_ms}</td>
+            <td>${d.backend_time_ms}</td>
+            <td>${d.network_time_ms}</td>
+            <td ${d.total_elapsed_ms > 1500 ? 'class="warn"' : 'class="ok"'}>${d.total_elapsed_ms}</td>
+          `;
+          logBody.prepend(tr);
+        }
+
+        async function sendNormal() {
+          status.textContent = '送信中…';
+          const start = performance.now();
+          const body = JSON.stringify({ type: 'normal', message: 'hello' });
+          const res = await fetch(`${relayBase}/api/request`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body
+          });
+          const json = await res.json();
+          json.total_elapsed_ms = Math.round(performance.now() - start);
+          addRow(json);
+          status.textContent = '';
+        }
+
+        function randomBytes(size) {
+          const arr = new Uint8Array(size);
+          crypto.getRandomValues(arr);
+          return arr;
+        }
+
+        async function sendUpload() {
+          status.textContent = '1MiB 送信中…';
+          const start = performance.now();
+          const blob = new Blob([randomBytes(1024 * 1024)], { type: 'application/octet-stream' });
+          const res = await fetch(`${relayBase}/api/upload`, {
+            method: 'POST',
+            headers: { 'X-Upload-Type': 'blob' },
+            body: blob
+          });
+          const json = await res.json();
+          json.total_elapsed_ms = Math.round(performance.now() - start);
+          addRow(json);
+          status.textContent = '';
+        }
+
+        document.getElementById('btn-normal').addEventListener('click', sendNormal);
+        document.getElementById('btn-upload').addEventListener('click', sendUpload);
+      </script>
+    </body>
+    </html>

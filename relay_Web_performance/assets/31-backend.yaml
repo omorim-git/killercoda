@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: latency-demo
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: backend } }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      nodeSelector:
+        role: normal
+      containers:
+        - name: backend
+          image: python:3.11-slim
+          ports: [{ containerPort: 5000 }]
+          volumeMounts:
+            - name: code
+              mountPath: /app
+          command:
+            - /bin/sh
+            - -c
+            - |
+              pip install --no-cache-dir flask && \
+              python /app/backend.py
+      volumes:
+        - name: code
+          configMap:
+            name: backend-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-svc
+  namespace: latency-demo
+spec:
+  selector: { app: backend }
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+  type: ClusterIP

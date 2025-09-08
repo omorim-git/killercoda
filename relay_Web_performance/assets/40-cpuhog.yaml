@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cpu-hog
+  namespace: latency-demo
+spec:
+  replicas: 0
+  selector: { matchLabels: { app: cpu-hog } }
+  template:
+    metadata:
+      labels: { app: cpu-hog }
+    spec:
+      nodeSelector:
+        role: hotspot
+      containers:
+        - name: hog
+          image: python:3.11-slim
+          resources:
+            requests:
+              cpu: "500m"
+            limits:
+              cpu: "2"           # ノードに応じ調整可
+          command:
+            - /bin/sh
+            - -c
+            - |
+              python - <<'PY'
+              import multiprocessing, hashlib, time, threading, random
+              def burn():
+                  x = 0
+                  while True:
+                      for i in range(120000):
+                          x = (x * 1664525 + 1013904223) & 0xffffffff
+                          hashlib.sha256(str(x).encode()).hexdigest()
+              for _ in range(max(1, multiprocessing.cpu_count()-0)):
+                  threading.Thread(target=burn, daemon=True).start()
+              while True:
+                  time.sleep(1)
+              PY
