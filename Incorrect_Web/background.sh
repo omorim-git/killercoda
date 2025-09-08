@@ -9,19 +9,8 @@ CODENAME=$(lsb_release -sc)
 ARCH=$(dpkg --print-architecture)
 
 # ubuntu.sources を置き換え
-sudo tee /etc/apt/sources.list.d/ubuntu.sources > /dev/null <<EOF
-Types: deb
-URIs: http://mirrors.iitd.ac.in/ubuntu/
-Suites: $CODENAME $CODENAME-updates $CODENAME-backports
-Components: main restricted universe multiverse
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-
-Types: deb
-URIs: http://security.ubuntu.com/ubuntu
-Suites: $CODENAME-security
-Components: main restricted universe multiverse
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-EOF
+sudo sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.iitd.ac.in/ubuntu/|g' \
+    /etc/apt/sources.list.d/ubuntu.sources
 
 echo "[INFO] Running apt-get update..."
 sudo apt-get update -y
