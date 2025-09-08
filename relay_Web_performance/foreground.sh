@@ -10,8 +10,6 @@ if [ "${#NODES[@]}" -lt 2 ]; then
 fi
 HOT="${NODES[0]}"
 NORM="${NODES[1]}"
-kubectl label node "${HOT}" role=hotspot --overwrite
-kubectl label node "${NORM}" role=normal  --overwrite
 echo "  hotspot: ${HOT}"
 echo "  normal : ${NORM}"
 
@@ -30,7 +28,7 @@ kubectl -n latency-demo rollout status deploy/relay
 kubectl -n latency-demo rollout status deploy/backend
 
 echo "[5/6] Show access info"
-NODE_IP=$(kubectl get node "${NORM}" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
+NODE_IP=$(kubectl get node node01 -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
 FR_PORT=30080
 RELAY_PORT=30081
 cat <<EOF

@@ -11,7 +11,7 @@ spec:
       labels: { app: cpu-hog }
     spec:
       nodeSelector:
-        role: hotspot
+        kubernetes.io/hostname: node01   # ← relay と同じ worker に固定
       containers:
         - name: hog
           image: python:3.11-slim

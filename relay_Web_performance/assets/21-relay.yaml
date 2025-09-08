@@ -11,7 +11,7 @@ spec:
       labels: { app: relay }
     spec:
       nodeSelector:
-        role: hotspot
+        kubernetes.io/hostname: node01   # ← worker ノードへ固定
       containers:
         - name: relay
           image: python:3.11-slim

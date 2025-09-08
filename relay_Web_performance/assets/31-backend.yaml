@@ -11,7 +11,11 @@ spec:
       labels: { app: backend }
     spec:
       nodeSelector:
-        role: normal
+        kubernetes.io/hostname: controlplane
+      tolerations:
+        - key: "node-role.kubernetes.io/control-plane"
+          operator: "Exists"
+          effect: "NoSchedule"
       containers:
         - name: backend
           image: python:3.11-slim

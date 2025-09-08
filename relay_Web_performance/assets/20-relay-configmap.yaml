@@ -30,6 +30,21 @@ data:
     @app.after_request
     def add_cors(resp):
       return cors(resp)
+    
+    @app.route("/", methods=["GET"])
+    def serve_frontend():
+        # フロントを内部サービス経由で取得し、そのまま返す
+        r = requests.get("http://frontend-svc/", timeout=10)
+        resp = make_response(r.text, r.status_code)
+        # 最低限のヘッダを転送
+        for k, v in r.headers.items():
+            if k.lower() in ("content-type", "cache-control"):
+                resp.headers[k] = v
+        return resp
+
+    @app.route("/favicon.ico")
+    def favicon():
+    return make_response("", 204)
 
     @app.route("/api/ping")
     def ping():
