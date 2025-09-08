@@ -54,9 +54,7 @@ data:
       </table>
 
       <script>
-        const relayPort = 30081; // Relay NodePort（固定）
-        const relayBase = `http://${window.location.hostname}:${relayPort}`;
-
+        // Relay 経由の同一オリジンアクセスに統一（相対パス）
         const logBody = document.getElementById('log');
         const status = document.getElementById('status');
         let counter = 0;
@@ -80,7 +78,7 @@ data:
           status.textContent = '送信中…';
           const start = performance.now();
           const body = JSON.stringify({ type: 'normal', message: 'hello' });
-          const res = await fetch(`${relayBase}/api/request`, {
+          const res = await fetch('/api/request', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body
@@ -101,7 +99,7 @@ data:
           status.textContent = '1MiB 送信中…';
           const start = performance.now();
           const blob = new Blob([randomBytes(1024 * 1024)], { type: 'application/octet-stream' });
-          const res = await fetch(`${relayBase}/api/upload`, {
+          const res = await fetch('/api/upload', {
             method: 'POST',
             headers: { 'X-Upload-Type': 'blob' },
             body: blob
