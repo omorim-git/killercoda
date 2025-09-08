@@ -11,7 +11,7 @@ spec:
       labels: { app: relay }
     spec:
       nodeSelector:
-        kubernetes.io/hostname: node01   # ← worker ノードへ固定
+        kubernetes.io/hostname: node01
       containers:
         - name: relay
           image: python:3.11-slim
@@ -19,6 +19,11 @@ spec:
           env:
             - name: BACKEND_URL
               value: http://backend-svc:5000
+          resources:
+            requests:
+              cpu: "200m"
+            limits:
+              cpu: "2"
           volumeMounts:
             - name: code
               mountPath: /app

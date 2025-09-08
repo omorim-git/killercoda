@@ -13,7 +13,7 @@ data:
       <title>Latency Demo</title>
       <style>
         body { font-family: system-ui, sans-serif; max-width: 900px; margin: 24px auto; }
-        h1 { margin-bottom: 0.25rem; }
+        h1 { margin-bottom: .25rem; }
         .desc { color: #555; margin-bottom: 1rem; }
         button { padding: .6rem 1rem; margin-right: .5rem; cursor: pointer; }
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
@@ -27,13 +27,12 @@ data:
       <h1>CPU 競合レイテンシデモ</h1>
       <div class="desc">
         ルート: ユーザ(このページ) → 中継サーバ → Webアプリ。<br/>
-        中継サーバで CPU チェック処理を行い、途中で同ノードに CPU 100% のホグコンテナを起動します。<br/>
-        下のボタンで通常/大容量(1MiB) リクエストを送ると、各サーバ処理時間と推定ネットワーク時間が記録されます。
+        「通常リクエスト」ボタンを押すたびに、各サーバ処理時間と推定ネットワーク時間、合計往復時間を記録・追記します。<br/>
+        Step2 では同ノードに CPU-hog を自動起動し、遅延悪化を体感します。
       </div>
 
       <div>
         <button id="btn-normal">通常リクエスト</button>
-        <button id="btn-upload">1MiB アップロード</button>
         <span id="status"></span>
       </div>
 
@@ -54,7 +53,6 @@ data:
       </table>
 
       <script>
-        // Relay 経由の同一オリジンアクセスに統一（相対パス）
         const logBody = document.getElementById('log');
         const status = document.getElementById('status');
         let counter = 0;
@@ -75,52 +73,33 @@ data:
         }
 
         async function sendNormal() {
-          status.textContent = '送信中…';
-          const start = performance.now();
-          const body = JSON.stringify({ type: 'normal', message: 'hello' });
-          const res = await fetch('/api/request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body
-          });
-          const json = await res.json();
-          const clientTotal = Math.round(performance.now() - start);
-          const netEst = Math.max(clientTotal - json.relay_time_ms - json.backend_time_ms, 0);
-          json.total_elapsed_ms = clientTotal;
-          json.network_time_ms = netEst;
-          addRow(json);
-          status.textContent = '';
-        }
+          try {
+            status.textContent = '送信中…';
+            const start = performance.now();
+            const body = JSON.stringify({ type: 'normal', message: 'hello' });
+            const res = await fetch('/api/request', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body
+            });
+            const json = await res.json();
 
-        function randomBytes(size) {
-          const out = new Uint8Array(size);
-          const CHUNK = 65536; // getRandomValues の上限
-          for (let i = 0; i < size; i += CHUNK) {
-            const end = Math.min(i + CHUNK, size);
-            crypto.getRandomValues(out.subarray(i, end));
+            // クライアント観点で整合
+            const clientTotal = Math.round(performance.now() - start);
+            const netEst = Math.max(clientTotal - json.relay_time_ms - json.backend_time_ms, 0);
+            json.total_elapsed_ms = clientTotal;
+            json.network_time_ms = netEst;
+
+            addRow(json);
+          } catch (e) {
+            console.error(e);
+            alert('リクエストに失敗しました');
+          } finally {
+            status.textContent = '';
           }
-          return out;
-        }
-
-        async function sendUpload() {
-          status.textContent = '1MiB 送信中…';
-          const start = performance.now();
-          const blob = new Blob([randomBytes(512 * 1024)], { type: 'application/octet-stream' }); // 500KiB
-          const res = await fetch('/api/upload', {
-            method: 'POST',
-            body: blob
-          });
-          const json = await res.json();
-          const clientTotal = Math.round(performance.now() - start);
-          const netEst = Math.max(clientTotal - json.relay_time_ms - json.backend_time_ms, 0);
-          json.total_elapsed_ms = clientTotal;
-          json.network_time_ms = netEst;
-          addRow(json);
-          status.textContent = '';
         }
 
         document.getElementById('btn-normal').addEventListener('click', sendNormal);
-        document.getElementById('btn-upload').addEventListener('click', sendUpload);
       </script>
     </body>
     </html>

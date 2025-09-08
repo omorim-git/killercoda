@@ -10,6 +10,11 @@
         {
           "title": "問題",
           "text": "step1.md"
+        },
+        {
+          "title": "トラブル発生",
+          "text": "step2.md",
+          "foreground": "setup-step2.sh"
         }
       ],
       "finish": {

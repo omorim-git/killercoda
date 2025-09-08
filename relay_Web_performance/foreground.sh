@@ -1,19 +1,9 @@
 #!/bin/bash
 
-echo "[1/6] Create namespace"
+echo "[1/5] Namespace"
 kubectl apply -f /etc/kc_relay_web/00-namespace.yaml
 
-echo "[2/6] Label two nodes (hotspot / normal)"
-mapfile -t NODES < <(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
-if [ "${#NODES[@]}" -lt 2 ]; then
-  echo "ERROR: 2ノード以上が必要です"; exit 1
-fi
-HOT="${NODES[0]}"
-NORM="${NODES[1]}"
-echo "  hotspot: ${HOT}"
-echo "  normal : ${NORM}"
-
-echo "[3/6] Apply manifests"
+echo "[2/5] Manifests"
 kubectl apply -f /etc/kc_relay_web/10-frontend-configmap.yaml
 kubectl apply -f /etc/kc_relay_web/11-frontend.yaml
 kubectl apply -f /etc/kc_relay_web/20-relay-configmap.yaml
@@ -22,22 +12,14 @@ kubectl apply -f /etc/kc_relay_web/30-backend-configmap.yaml
 kubectl apply -f /etc/kc_relay_web/31-backend.yaml
 kubectl apply -f /etc/kc_relay_web/40-cpuhog.yaml
 
-echo "[4/6] Wait for deployments (frontend, relay, backend)"
+echo "[3/5] Rollout"
 kubectl -n latency-demo rollout status deploy/frontend
 kubectl -n latency-demo rollout status deploy/relay
 kubectl -n latency-demo rollout status deploy/backend
 
-echo "[5/6] Show access info"
+echo "[4/5] Access URL"
 NODE_IP=$(kubectl get node node01 -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}')
-FR_PORT=30080
-RELAY_PORT=30081
-cat <<EOF
+echo "Open:  http://${NODE_IP}:30081/   (relay経由でフロント表示)"
 
-アクセス方法:
-- フロント:  http://${NODE_IP}:${FR_PORT}/
-  (ページの JS はリレーを http://<同じホスト名>:${RELAY_PORT} へ呼び出します)
-
-EOF
-
-echo "セットアップ完了。ブラウザでフロントにアクセスしてリクエストを送ってください。"
-
+echo "[5/5] Notes"
+echo "- 通常リクエストの履歴で基準性能を確認してください。"

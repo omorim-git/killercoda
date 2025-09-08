@@ -5,7 +5,8 @@ metadata:
   namespace: latency-demo
 data:
   backend.py: |
-    import time, hashlib
+    import time
+    import hashlib
     from flask import Flask, request, jsonify
 
     app = Flask(__name__)

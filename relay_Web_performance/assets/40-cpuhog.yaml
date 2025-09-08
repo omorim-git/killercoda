@@ -14,32 +14,34 @@ spec:
         app: cpu-hog
     spec:
       nodeSelector:
-        kubernetes.io/hostname: node01   # relay と同じ worker に固定
+        kubernetes.io/hostname: node01
       containers:
         - name: hog
           image: python:3.11-slim
           resources:
             requests:
-              cpu: "500m"
+              cpu: "100m"
             limits:
-              cpu: "2"
-          command:
-            - /bin/sh
-            - -c
+              cpu: "1"
+          env:
+            - name: HOG_PROCS
+              value: "1"
+          command: ["/bin/sh","-c"]
+          args:
             - |
               python - <<'PY'
-              import multiprocessing, hashlib, time, threading
-
+              import multiprocessing
+              import os
               def burn():
                   x = 0
                   while True:
-                      for i in range(120000):
-                          x = (x * 1664525 + 1013904223) & 0xffffffff
-                          hashlib.sha256(str(x).encode()).hexdigest()
-
-              for _ in range(max(1, multiprocessing.cpu_count() - 0)):
-                  threading.Thread(target=burn, daemon=True).start()
-
-              while True:
-                  time.sleep(1)
+                      x = (x * 1664525 + 1013904223) & 0xffffffff
+              procs = int(os.getenv("HOG_PROCS", "1") or "1")
+              ps = []
+              for _ in range(procs):
+                  p = multiprocessing.Process(target=burn, daemon=True)
+                  p.start()
+                  ps.append(p)
+              for p in ps:
+                  p.join()
               PY

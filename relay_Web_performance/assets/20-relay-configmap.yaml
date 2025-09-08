@@ -5,12 +5,16 @@ metadata:
   namespace: latency-demo
 data:
   relay.py: |
-    import os, time, json, hashlib
+    import os
+    import time
+    import json
+    import hashlib
     from flask import Flask, request, jsonify, make_response
     import requests
 
     BACKEND_URL = os.environ.get("BACKEND_URL", "http://backend-svc:5000")
     app = Flask(__name__)
+    app.config["JSON_AS_ASCII"] = False
 
     def cpu_check(work_units: int):
         x = 0
@@ -28,20 +32,15 @@ data:
     @app.after_request
     def add_cors(resp):
         return cors(resp)
-    
+
     @app.route("/", methods=["GET"])
     def serve_frontend():
         r = requests.get("http://frontend-svc/", timeout=10)
-        # bytesで透過
-        resp = make_response(r.content, r.status_code)
-
-        # 上流のContent-Typeにcharsetが無ければUTF-8を明示
+        resp = make_response(r.content, r.status_code)  # bytes透過
         ct = r.headers.get("Content-Type", "text/html; charset=utf-8")
         if "charset=" not in ct.lower() and ct.lower().startswith("text/html"):
             ct = "text/html; charset=utf-8"
         resp.headers["Content-Type"] = ct
-
-        # 必要なら他のヘッダも転送
         for k, v in r.headers.items():
             if k.lower() in ("cache-control",):
                 resp.headers[k] = v
@@ -62,11 +61,10 @@ data:
 
         req_json = request.get_json(force=True, silent=True) or {}
         content = req_json.get("message", "")
-        req_type = req_json.get("type", "normal")
         t0 = time.time()
 
-        # コンテンツ長に応じた負荷
-        work_units = 80_000 if req_type == "normal" else 150_000
+        # 通常リクエストのCPU負荷
+        work_units = 80_000
         r0 = time.time()
         cpu_check(work_units)
         r1 = time.time()
@@ -83,59 +81,4 @@ data:
 
         t1 = time.time()
         relay_ms = round((r1 - r0) * 1000)
-        backend_ms = backend.get("backend_time_ms", round((b1 - b0) * 1000))
-        total_ms = round((t1 - t0) * 1000)
-        net_ms = max(total_ms - relay_ms - backend_ms, 0)
-
-        return jsonify({
-            "request_timestamp": payload["request_timestamp"],
-            "request_type": "normal",
-            "request_info": payload["request_info"],
-            "relay_time_ms": relay_ms,
-            "backend_time_ms": backend_ms,
-            "network_time_ms": net_ms,
-            "total_elapsed_ms": total_ms
-        })
-
-    @app.route("/api/upload", methods=["POST", "OPTIONS"])
-    def handle_upload():
-        if request.method == "OPTIONS":
-            return make_response("", 204)
-
-        data = request.get_data(cache=False, as_text=False) or b""
-        size = len(data)
-        t0 = time.time()
-
-        work_units = int(120_000 * max(size, 1) / (1024 * 1024))
-        r0 = time.time()
-        cpu_check(work_units)
-        r1 = time.time()
-
-        payload = {
-            "request_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "request_info": f"bytes={size}",
-        }
-        b0 = time.time()
-        br = requests.post(f"{BACKEND_URL}/process", json=payload, timeout=120)
-        br.raise_for_status()
-        b1 = time.time()
-        backend = br.json()
-
-        t1 = time.time()
-        relay_ms = round((r1 - r0) * 1000)
-        backend_ms = backend.get("backend_time_ms", round((b1 - b0) * 1000))
-        total_ms = round((t1 - t0) * 1000)
-        net_ms = max(total_ms - relay_ms - backend_ms, 0)
-
-        return jsonify({
-            "request_timestamp": payload["request_timestamp"],
-            "request_type": "upload(1MiB)",
-            "request_info": payload["request_info"],
-            "relay_time_ms": relay_ms,
-            "backend_time_ms": backend_ms,
-            "network_time_ms": net_ms,
-            "total_elapsed_ms": total_ms
-        })
-
-    if __name__ == "__main__":
-        app.run(host="0.0.0.0", port=8080)
+        backend_ms = backend.get("backend_time_ms", round((b1 - b0_
