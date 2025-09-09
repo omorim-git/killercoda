@@ -25,31 +25,27 @@ kubectl top pods -A
 ```bash
 kubectl -n latency-demo top pods
 ```{{copy}}
-- Pod の一覧を確認
-```bash
-kubectl -n latency-demo get pods
-```{{copy}}
 - Pod の詳細・イベント確認
 ```bash
-kubectl -n latency-demo describe pod <pod名>
+kubectl -n latency-demo describe pod pod名
 ```{{copy}}
 - Pod のログを確認
 ```bash
-kubectl -n latency-demo logs <pod名>
+kubectl -n latency-demo logs pod名
 ```{{copy}}
 - Pod の起動
 ```bash
-kubectl -n latency-demo scale deploy/<app名> --replicas=1
+kubectl -n latency-demo scale deploy/app名 --replicas=1
 ```{{copy}}
 - Pod の停止
 ```bash
-kubectl -n latency-demo scale deploy/<app名> --replicas=0
+kubectl -n latency-demo scale deploy/app名 --replicas=0
 ```{{copy}}
 - Pod 内へのコマンド実行(psコマンドの例)
 ```bash
-kubectl -n latency-demo exec <pod名> -- ps aux
+kubectl -n latency-demo exec pod名 -- ps aux
 ```{{copy}}
 - Pod 内へのログイン
 ```bash
-kubectl -n latency-demo exec -it <pod名> -- /bin/sh
+kubectl -n latency-demo exec -it pod名 -- /bin/sh
 ```{{copy}}
