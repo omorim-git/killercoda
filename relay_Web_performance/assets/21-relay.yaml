@@ -21,7 +21,7 @@ spec:
               value: http://backend-svc:5000
           resources:
             requests:
-              cpu: "200m"
+              cpu: "50m"
             limits:
               cpu: "2"
           volumeMounts:

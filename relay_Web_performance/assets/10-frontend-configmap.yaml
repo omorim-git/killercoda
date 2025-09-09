@@ -32,7 +32,7 @@ data:
       </div>
 
       <div>
-        <button id="btn-normal">通常リクエスト</button>
+        <button id="btn-normal">リクエスト</button>
         <span id="status"></span>
       </div>
 
@@ -67,7 +67,7 @@ data:
             <td>${d.relay_time_ms}</td>
             <td>${d.backend_time_ms}</td>
             <td>${d.network_time_ms}</td>
-            <td ${d.total_elapsed_ms > 1500 ? 'class="warn"' : 'class="ok"'}>${d.total_elapsed_ms}</td>
+            <td ${d.total_elapsed_ms > 1000 ? 'class="warn"' : 'class="ok"'}>${d.total_elapsed_ms}</td>
           `;
           logBody.prepend(tr);
         }

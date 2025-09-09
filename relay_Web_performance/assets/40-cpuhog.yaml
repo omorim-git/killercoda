@@ -20,7 +20,7 @@ spec:
           image: python:3.11-slim
           resources:
             requests:
-              cpu: "100m"
+              cpu: "7000m"
             limits:
               cpu: "1"
           env:
