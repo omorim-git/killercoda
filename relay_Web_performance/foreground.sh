@@ -19,7 +19,6 @@ kubectl -n latency-demo rollout status deploy/backend
 echo "[4/5] metrics-server"
 curl -sSL https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml \
 | yq '
-  # Deployment/metrics-server だけを書き換える
   (. | select(.kind=="Deployment" and .metadata.name=="metrics-server").spec.template.spec.terminationGracePeriodSeconds) |= 5
   |
   (. | select(.kind=="Deployment" and .metadata.name=="metrics-server").spec.template.spec.containers[0].args)
