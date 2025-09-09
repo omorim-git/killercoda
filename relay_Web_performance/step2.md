@@ -3,7 +3,7 @@
 
 👉 [Webページを開く]({{TRAFFIC_HOST1_30081}})
 
-役立つコマンド群は以下です。
+役立つコマンド群は以下です。**置き換えが必要なコマンドはメモ帳などで置き換えて貼ったほうが良いです。**
 
 - ノードと Pod の状態を見る
 ```bash
@@ -28,11 +28,11 @@ kubectl top pods -A
 ```bash
 kubectl -n latency-demo top pods
 ```{{copy}}
-- Pod の詳細・イベント確認<br>※pod名をkubectl top pods -Aで確認したNAMEに置き換え
+- Pod の詳細・イベント確認<br>※pod名をkubectl get pods -A -o wideで確認したNAMEに置き換え
 ```bash
 kubectl -n latency-demo describe pod pod名
 ```{{copy}}
-- Pod のログを確認<br>※pod名をkubectl top pods -Aで確認したNAMEに置き換え
+- Pod のログを確認<br>※pod名をkubectl get pods -A -o wideで確認したNAMEに置き換え
 ```bash
 kubectl -n latency-demo logs pod名
 ```{{copy}}
@@ -44,11 +44,11 @@ kubectl -n latency-demo scale deploy/app名 --replicas=1
 ```bash
 kubectl -n latency-demo scale deploy/app名 --replicas=0
 ```{{copy}}
-- Pod 内へのコマンド実行(psコマンドの例)<br>※pod名をkubectl top pods -Aで確認したNAMEに置き換え
+- Pod 内へのコマンド実行(lsコマンドの例)<br>※pod名をkubectl get pods -A -o wideで確認したNAMEに置き換え
 ```bash
-kubectl -n latency-demo exec pod名 -- ps aux
+kubectl -n latency-demo exec pod名 -- ls
 ```{{copy}}
-- Pod 内へのログイン<br>※pod名をkubectl top pods -Aで確認したNAMEに置き換え
+- Pod 内へのログイン<br>※pod名をkubectl get pods -A -o wideで確認したNAMEに置き換え
 ```bash
 kubectl -n latency-demo exec -it pod名 -- /bin/sh
 ```{{copy}}
