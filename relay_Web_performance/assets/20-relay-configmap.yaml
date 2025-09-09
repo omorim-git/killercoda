@@ -87,8 +87,6 @@ data:
 
         return jsonify({
             "request_timestamp": payload["request_timestamp"],
-            "request_type": "normal",
-            "request_info": payload["request_info"],
             "relay_time_ms": relay_ms,
             "backend_time_ms": backend_ms,
             "network_time_ms": net_ms,

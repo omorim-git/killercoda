@@ -41,8 +41,6 @@ data:
           <tr>
             <th>#</th>
             <th>リクエスト時刻</th>
-            <th>種別</th>
-            <th>リクエスト内容</th>
             <th>中継サーバ(ms)</th>
             <th>Webアプリ(ms)</th>
             <th>ネットワーク推定(ms)</th>
@@ -62,8 +60,6 @@ data:
           tr.innerHTML = `
             <td>${++counter}</td>
             <td>${d.request_timestamp}</td>
-            <td>${d.request_type}</td>
-            <td>${d.request_info}</td>
             <td>${d.relay_time_ms}</td>
             <td>${d.backend_time_ms}</td>
             <td>${d.network_time_ms}</td>
