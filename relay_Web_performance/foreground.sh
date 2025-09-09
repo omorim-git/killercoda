@@ -10,7 +10,6 @@ kubectl apply -f /etc/kc_relay_web/20-relay-configmap.yaml
 kubectl apply -f /etc/kc_relay_web/21-relay.yaml
 kubectl apply -f /etc/kc_relay_web/30-backend-configmap.yaml
 kubectl apply -f /etc/kc_relay_web/31-backend.yaml
-kubectl apply -f /etc/kc_relay_web/40-cpuhog.yaml
 
 echo "[3/5] Rollout"
 kubectl -n latency-demo rollout status deploy/frontend

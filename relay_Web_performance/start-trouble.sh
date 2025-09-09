@@ -2,6 +2,7 @@
 
 echo "[Step2] cpu-hog を起動してレイテンシ劣化を再現します"
 
+kubectl apply -f /etc/kc_relay_web/40-cpuhog.yaml
 kubectl -n latency-demo scale deploy/cpu-hog --replicas=1
 kubectl -n latency-demo rollout status deploy/cpu-hog --timeout=120s || true
 
