@@ -18,8 +18,13 @@ kubectl -n latency-demo rollout status deploy/backend
 
 echo "[4/5] metrics-server"
 curl -sSL https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml \
-| sed '/containers:/a\        args:\n        - --kubelet-insecure-tls\n        - --kubelet-preferred-address-types=InternalIP' \
-| sed '/spec:/a\  terminationGracePeriodSeconds: 5' \
+| yq '
+  # Deployment/metrics-server だけを書き換える
+  (. | select(.kind=="Deployment" and .metadata.name=="metrics-server").spec.template.spec.terminationGracePeriodSeconds) |= 5
+  |
+  (. | select(.kind=="Deployment" and .metadata.name=="metrics-server").spec.template.spec.containers[0].args)
+    |= ((. // []) + ["--kubelet-insecure-tls","--kubelet-preferred-address-types=InternalIP"])
+' \
 | kubectl apply -f -
 
 echo "[5/5] 準備完了"
