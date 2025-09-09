@@ -27,4 +27,4 @@ echo "[4/5] metrics-server"
     && for i in $(seq 1 10); do kubectl top nodes && break || { echo "metrics not ready yet; retry $i/10"; sleep 3; }; done
 
 echo "[5/5] 準備完了"
-echo "- Webページを開いて通常時の性能を確認してください。"
+echo "準備が完了しました。Webページを開いて通常時の性能を確認してください。"
