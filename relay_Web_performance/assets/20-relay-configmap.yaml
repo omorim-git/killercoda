@@ -81,4 +81,19 @@ data:
 
         t1 = time.time()
         relay_ms = round((r1 - r0) * 1000)
-        backend_ms = backend.get("backend_time_ms", round((b1 - b0_
+        backend_ms = backend.get("backend_time_ms", round((b1 - b0) * 1000))
+        total_ms = round((t1 - t0) * 1000)
+        net_ms = max(total_ms - relay_ms - backend_ms, 0)
+
+        return jsonify({
+            "request_timestamp": payload["request_timestamp"],
+            "request_type": "normal",
+            "request_info": payload["request_info"],
+            "relay_time_ms": relay_ms,
+            "backend_time_ms": backend_ms,
+            "network_time_ms": net_ms,
+            "total_elapsed_ms": total_ms
+        })
+
+    if __name__ == "__main__":
+        app.run(host="0.0.0.0", port=8080, threaded=True)
