@@ -1,5 +1,13 @@
 #!/bin/bash
-set -euo pipefail
+echo "[INFO] Updating apt sources to use mirrors.edge.kernel.org..."
+
+# バックアップを保存
+sudo cp /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak.$(date +%s)
+
+# ubuntu.sources を置き換え
+sudo sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.iitd.ac.in/ubuntu|g' \
+    /etc/apt/sources.list.d/ubuntu.sources
+
 
 # ====== 設定 ======
 DB_NAME="${DB_NAME:-data_db}"

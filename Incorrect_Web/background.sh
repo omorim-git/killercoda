@@ -4,10 +4,6 @@ echo "[INFO] Updating apt sources to use mirrors.edge.kernel.org..."
 # バックアップを保存
 sudo cp /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list.d/ubuntu.sources.bak.$(date +%s)
 
-# コードネーム取得 (例: noble, jammy)
-CODENAME=$(lsb_release -sc)
-ARCH=$(dpkg --print-architecture)
-
 # ubuntu.sources を置き換え
 sudo sed -i 's|http://archive.ubuntu.com/ubuntu|http://mirrors.iitd.ac.in/ubuntu|g' \
     /etc/apt/sources.list.d/ubuntu.sources
