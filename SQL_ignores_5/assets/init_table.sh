@@ -51,7 +51,3 @@ FROM generate_series(0, 99) AS gs;
 
 echo "==> Done. Row count:"
 "${PSQL_BASE[@]}" -d "${DB_NAME}" -c "SELECT COUNT(*) AS users_count FROM users;"
-
-echo "==> First 10 rows preview:"
-"${PSQL_BASE[@]}" -d "${DB_NAME}" -c "SELECT * FROM users ORDER BY id::int LIMIT 10;"
-
