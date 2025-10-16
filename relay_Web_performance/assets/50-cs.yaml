@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cs
+  namespace: latency-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cs
+  template:
+    metadata:
+      labels:
+        app: cs
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: node01
+      containers:
+        - name: cscontainer
+          image: python:3.11-slim
+          resources:
+            requests:
+              cpu: "200m"
+            limits:
+              cpu: "500m"
+          env:
+            - name: HOG_PROCS
+              value: "300"
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              python - <<'PY'
+              import multiprocessing, os, time
+              def sleeper():
+                  while True:
+                      time.sleep(0.001)  # 1ms sleepを無限に繰り返す
+              procs = int(os.getenv("HOG_PROCS", "100"))
+              for _ in range(procs):
+                  p = multiprocessing.Process(target=sleeper, daemon=True)
+                  p.start()
+              # メインプロセスを維持
+              while True:
+                  time.sleep(60)
+              PY

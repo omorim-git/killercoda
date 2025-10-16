@@ -15,6 +15,11 @@
           "title": "トラブル発生",
           "text": "step2.md",
           "background": "start-trouble.sh"
+        },
+        {
+          "title": "トラブル発生2",
+          "text": "step3.md",
+          "foreground": "start-trouble2.sh"
         }
       ],
       "finish": {

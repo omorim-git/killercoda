@@ -21,7 +21,7 @@ spec:
           resources:
             requests:
               cpu: "700m"
-            limits:
+            limits:　
               cpu: "1"
           env:
             - name: HOG_PROCS
