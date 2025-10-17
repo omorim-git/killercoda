@@ -23,24 +23,32 @@ data:
             hashlib.sha256(str(x).encode()).hexdigest()
         return x
 
-    def cors(resp):
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        resp.headers["Access-Control-Allow-Headers"] = "*"
-        resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-        return resp
-
     def now_ns():
         # 高分解能・単調時間
         return time.perf_counter_ns()
 
-    @app.after_request
-    def add_cors(resp):
-        return cors(resp)
-
     @app.before_request
     def mark_arrival():
-        # JSONパース前（WSGIルーティング直後）に到着時刻を記録
+        # 受信直後（JSONパース前）で到着時間を記録
         g.t_arrive = now_ns()
+
+    @app.after_request
+    def add_cors_and_timing(resp):
+        # 応答直前までのサーバ内合計をヘッダに載せる
+        try:
+            if hasattr(g, "t_arrive"):
+                t_done = now_ns()
+                server_total_ms = round((t_done - g.t_arrive) / 1e6)
+                resp.headers["X-Server-Total-MS"] = str(server_total_ms)
+        except Exception:
+            pass
+
+        # 必要ヘッダの付与（CORS + カスタムヘッダ読取許可）
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Headers"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
+        resp.headers["Access-Control-Expose-Headers"] = "X-Server-Total-MS,X-Backend-RTT-MS"
+        return resp
 
     @app.route("/", methods=["GET"])
     def serve_frontend():
@@ -74,7 +82,7 @@ data:
         content = req_json.get("message", "")
         t_parse1 = now_ns()
 
-        # 2) CPU負荷（従来どおり）
+        # 2) 中継サーバでのCPU負荷（デモ用）
         work_units = 80_000
         t_cpu0 = now_ns()
         cpu_check(work_units)
@@ -91,40 +99,41 @@ data:
         t_b1 = now_ns()
         backend = br.json()
 
-        # Backend 内部処理時間（サービス自身が返す）と往復時間の分離
+        # Backend内部処理時間（サービス自身が返す）と往復分離
         be_svc_ms = float(backend.get("backend_time_ms", 0.0))
         be_wall_ms = (t_b1 - t_b0) / 1e6
         be_rtt_ms  = max(be_wall_ms - be_svc_ms, 0.0)
 
         # 4) レスポンス生成
         t_build0 = now_ns()
-        # 互換フィールド（従来フロントの表示項目）
-        relay_time_ms   = round((t_cpu1 - t_cpu0) / 1e6)   # CPU部分のみ
-        backend_time_ms = round(be_svc_ms)                 # バックエンド内部処理
-        # サーバ内合計：到着（before_request）〜応答直前
-        server_total_ms = round((t_build0 - g.t_arrive) / 1e6)
+        relay_time_ms   = round((t_cpu1 - t_cpu0) / 1e6)   # 中継CPU区間
+        backend_time_ms = round(be_svc_ms)                 # バックエンド内部
+        server_total_ms = round((t_build0 - g.t_arrive) / 1e6)  # jsonify 直前まで
 
         resp_json = {
             "request_timestamp": payload["request_timestamp"],
             # 従来互換
             "relay_time_ms": relay_time_ms,
             "backend_time_ms": backend_time_ms,
-            # 新しい内訳
+            # 参考内訳
             "relay_parse_ms": round((t_parse1 - t_parse0) / 1e6),
             "relay_cpu_ms": relay_time_ms,
             "backend_rtt_ms": round(be_rtt_ms),
             "backend_svc_ms": backend_time_ms,
             "server_total_ms": server_total_ms,
-            # total_elapsed_ms はフロント側で clientTotal に置き換えられる想定だが、
-            # サーバ視点の合計も便宜上入れておく
+            # 互換のため便宜上サーバ合計も入れておく（フロントはヘッダを優先）
             "total_elapsed_ms": server_total_ms,
         }
+
+        # 必要ならバックエンドRTTもヘッダに（可視化用）
+        # （CORSで expose 済み）
+        # resp.headers["X-Backend-RTT-MS"] = str(round(be_rtt_ms))
+
+        # jsonify でボディを構築
         resp = jsonify(resp_json)
-        t_build1 = now_ns()
-        resp_json["relay_build_ms"] = round((t_build1 - t_build0) / 1e6)
-        return jsonify(resp_json)
+        # after_request で X-Server-Total-MS を最終計測して付与
+        return resp
 
     if __name__ == "__main__":
-        # threaded=True は1プロセス内の並行性を上げる（デモ用途）
         app.run(host="0.0.0.0", port=8080, threaded=True)
         

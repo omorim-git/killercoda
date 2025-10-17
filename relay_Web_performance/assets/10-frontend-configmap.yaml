@@ -27,8 +27,7 @@ data:
       <h1>Webアクセスレイテンシデモ</h1>
       <div class="desc">
         接続ルート: ユーザ(このページ) → 中継サーバ → Webアプリ。<br/>
-        「リクエスト」ボタンを押すたびに、各サーバ処理時間と推定ネットワーク時間、合計往復時間を記録・追記します。<br/>
-        Step2 ではトラブルが発生し、遅延悪化を体感します。
+        「リクエスト」ボタンを押すたびに、各サーバ処理時間と推定ネットワーク時間、合計往復時間を記録・追記します。
       </div>
 
       <div>
@@ -80,13 +79,17 @@ data:
             });
             const json = await res.json();
 
-            // クライアント観点の往復
             const clientTotal = Math.round(performance.now() - start);
 
-            // サーバ合計（到着〜応答直前）を優先してネットワークを推定
-            const serverTotal = typeof json.server_total_ms === 'number'
-              ? json.server_total_ms
-              : ((json.relay_time_ms || 0) + (json.backend_time_ms || 0));
+            // ヘッダ優先（応答直前までのサーバ合計をカバー）
+            const hdr = res.headers.get('X-Server-Total-MS');
+            let serverTotal = Number.isFinite(Number(hdr)) ? parseInt(hdr, 10) : NaN;
+            if (!Number.isFinite(serverTotal)) {
+              // 互換: ボディの server_total_ms → なければ中継CPU+バックエンド内部
+              serverTotal = (typeof json.server_total_ms === 'number')
+                ? json.server_total_ms
+                : ((json.relay_time_ms || 0) + (json.backend_time_ms || 0));
+            }
 
             const netEst = Math.max(clientTotal - serverTotal, 0);
 
