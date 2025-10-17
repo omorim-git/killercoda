@@ -17,28 +17,28 @@ spec:
         kubernetes.io/hostname: node01
       containers:
         - name: cscontainer
-          image: python:3.11-slim
+          image: ubuntu:24.04
           resources:
             requests:
               cpu: "200m"
-            limits:
-              cpu: "500m"
           env:
-            - name: HOG_PROCS
-              value: "300"
-          command: ["/bin/sh","-c"]
+            - name: CS_SWITCH
+              value: "8192"           # 上限内
+            - name: CS_FUTEX
+              value: "4096"           # 上限内（必要なら増減）
+            - name: OPS
+              value: "100000000"      # 1e8（上限）
+            - name: DURATION
+              value: "24h"
+          command: ["/bin/bash","-lc"]
           args:
             - |
-              python - <<'PY'
-              import multiprocessing, os, time
-              def sleeper():
-                  while True:
-                      time.sleep(0.001)  # 1ms sleepを無限に繰り返す
-              procs = int(os.getenv("HOG_PROCS", "100"))
-              for _ in range(procs):
-                  p = multiprocessing.Process(target=sleeper, daemon=True)
-                  p.start()
-              # メインプロセスを維持
-              while True:
-                  time.sleep(60)
-              PY
+              set -e
+              apt-get update -y >/dev/null
+              apt-get install -y --no-install-recommends stress-ng >/dev/null
+              [ -n "${AFFINITY}" ] && export TASKSET="taskset -c ${AFFINITY}" || export TASKSET=""
+              exec ${TASKSET} stress-ng \
+                --switch ${CS_SWITCH} --switch-ops ${OPS} \
+                --futex  ${CS_FUTEX}  --futex-ops  ${OPS} \
+                --metrics-brief \
+                --timeout ${DURATION}
