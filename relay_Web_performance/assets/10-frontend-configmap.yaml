@@ -80,9 +80,16 @@ data:
             });
             const json = await res.json();
 
-            // クライアント観点で整合
+            // クライアント観点の往復
             const clientTotal = Math.round(performance.now() - start);
-            const netEst = Math.max(clientTotal - json.relay_time_ms - json.backend_time_ms, 0);
+
+            // サーバ合計（到着〜応答直前）を優先してネットワークを推定
+            const serverTotal = typeof json.server_total_ms === 'number'
+              ? json.server_total_ms
+              : ((json.relay_time_ms || 0) + (json.backend_time_ms || 0));
+
+            const netEst = Math.max(clientTotal - serverTotal, 0);
+
             json.total_elapsed_ms = clientTotal;
             json.network_time_ms = netEst;
 

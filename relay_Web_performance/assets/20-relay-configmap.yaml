@@ -9,7 +9,7 @@ data:
     import time
     import json
     import hashlib
-    from flask import Flask, request, jsonify, make_response
+    from flask import Flask, request, jsonify, make_response, g
     import requests
 
     BACKEND_URL = os.environ.get("BACKEND_URL", "http://backend-svc:5000")
@@ -29,9 +29,18 @@ data:
         resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
         return resp
 
+    def now_ns():
+        # 高分解能・単調時間
+        return time.perf_counter_ns()
+
     @app.after_request
     def add_cors(resp):
         return cors(resp)
+
+    @app.before_request
+    def mark_arrival():
+        # JSONパース前（WSGIルーティング直後）に到着時刻を記録
+        g.t_arrive = now_ns()
 
     @app.route("/", methods=["GET"])
     def serve_frontend():
@@ -59,39 +68,63 @@ data:
         if request.method == "OPTIONS":
             return make_response("", 204)
 
+        # 1) JSONパース
+        t_parse0 = now_ns()
         req_json = request.get_json(force=True, silent=True) or {}
         content = req_json.get("message", "")
-        t0 = time.time()
+        t_parse1 = now_ns()
 
-        # 通常リクエストのCPU負荷
+        # 2) CPU負荷（従来どおり）
         work_units = 80_000
-        r0 = time.time()
+        t_cpu0 = now_ns()
         cpu_check(work_units)
-        r1 = time.time()
+        t_cpu1 = now_ns()
 
+        # 3) Backend 呼び出し（壁時計）
         payload = {
             "request_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "request_info": f"len={len(content)}",
         }
-        b0 = time.time()
+        t_b0 = now_ns()
         br = requests.post(f"{BACKEND_URL}/process", json=payload, timeout=60)
         br.raise_for_status()
-        b1 = time.time()
+        t_b1 = now_ns()
         backend = br.json()
 
-        t1 = time.time()
-        relay_ms = round((r1 - r0) * 1000)
-        backend_ms = backend.get("backend_time_ms", round((b1 - b0) * 1000))
-        total_ms = round((t1 - t0) * 1000)
-        net_ms = max(total_ms - relay_ms - backend_ms, 0)
+        # Backend 内部処理時間（サービス自身が返す）と往復時間の分離
+        be_svc_ms = float(backend.get("backend_time_ms", 0.0))
+        be_wall_ms = (t_b1 - t_b0) / 1e6
+        be_rtt_ms  = max(be_wall_ms - be_svc_ms, 0.0)
 
-        return jsonify({
+        # 4) レスポンス生成
+        t_build0 = now_ns()
+        # 互換フィールド（従来フロントの表示項目）
+        relay_time_ms   = round((t_cpu1 - t_cpu0) / 1e6)   # CPU部分のみ
+        backend_time_ms = round(be_svc_ms)                 # バックエンド内部処理
+        # サーバ内合計：到着（before_request）〜応答直前
+        server_total_ms = round((t_build0 - g.t_arrive) / 1e6)
+
+        resp_json = {
             "request_timestamp": payload["request_timestamp"],
-            "relay_time_ms": relay_ms,
-            "backend_time_ms": backend_ms,
-            "network_time_ms": net_ms,
-            "total_elapsed_ms": total_ms
-        })
+            # 従来互換
+            "relay_time_ms": relay_time_ms,
+            "backend_time_ms": backend_time_ms,
+            # 新しい内訳
+            "relay_parse_ms": round((t_parse1 - t_parse0) / 1e6),
+            "relay_cpu_ms": relay_time_ms,
+            "backend_rtt_ms": round(be_rtt_ms),
+            "backend_svc_ms": backend_time_ms,
+            "server_total_ms": server_total_ms,
+            # total_elapsed_ms はフロント側で clientTotal に置き換えられる想定だが、
+            # サーバ視点の合計も便宜上入れておく
+            "total_elapsed_ms": server_total_ms,
+        }
+        resp = jsonify(resp_json)
+        t_build1 = now_ns()
+        resp_json["relay_build_ms"] = round((t_build1 - t_build0) / 1e6)
+        return jsonify(resp_json)
 
     if __name__ == "__main__":
+        # threaded=True は1プロセス内の並行性を上げる（デモ用途）
         app.run(host="0.0.0.0", port=8080, threaded=True)
+        
