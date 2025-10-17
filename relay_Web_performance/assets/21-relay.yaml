@@ -19,6 +19,8 @@ spec:
           env:
             - name: BACKEND_URL
               value: http://backend-svc:5000
+            - name: CPU_AFFINITY
+              value: "0"
           resources:
             requests:
               cpu: "50m"

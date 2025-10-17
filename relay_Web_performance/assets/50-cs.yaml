@@ -22,7 +22,7 @@ spec:
             - name: SLEEP_US
               value: "100"             # 100µs。CPUが上がるなら 200〜1000 へ
             - name: AFFINITY
-              value: ""                # 必要なら "0" などでコア固定
+              value: "0"                # 必要なら "0" などでコア固定
           command: ["/bin/sh","-lc"]
           args:
             - |

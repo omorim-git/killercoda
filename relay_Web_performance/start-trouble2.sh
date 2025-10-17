@@ -31,9 +31,9 @@ fi
 echo "-> CSワークロードのマニフェストを適用: ${CS_YAML}"
 kubectl apply -f "${CS_YAML}"
 
-# 4) cs を起動（replicas=1）
-echo "-> ${CS_DEPLOY} を replicas=1 にスケールアップします"
-kubectl -n "${NS}" scale deploy/"${CS_DEPLOY}" --replicas=1
+# 4) cs を起動（replicas=2）
+echo "-> ${CS_DEPLOY} を replicas=2 にスケールアップします"
+kubectl -n "${NS}" scale deploy/"${CS_DEPLOY}" --replicas=2
 
 # 5) 起動完了待ち
 echo "-> ${CS_DEPLOY} のロールアウト完了を待機します（timeout=${ROLLOUT_TIMEOUT}）"
