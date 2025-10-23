@@ -50,5 +50,10 @@ kubectl -n latency-demo exec pod名 -- ls
 ```{{copy}}
 - Pod 内へのログイン<br>※pod名をkubectl get pods -A -o wideで確認したNAMEに置き換え
 ```bash
-kubectl -n latency-demo exec -it pod名 -- /bin/sh
+kubectl -n latency-demo exec -it pod名 -- /bin/bash
+```{{copy}}
+- Pod 内で性能確認ツールを導入
+```bash
+apt-get update -y
+apt-get install -y --no-install-recommends procps sysstat util-linux
 ```{{copy}}
