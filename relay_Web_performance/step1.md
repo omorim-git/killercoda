@@ -5,7 +5,7 @@ Webページを開いて通常時の性能を確認しましょう。
 
 👉 [Webページを開く]({{TRAFFIC_HOST1_30081}})
 
-![Scan results](assets/image.png)
+![Scan results](./assets/image.png)
   - Relay (中継サーバ): ユーザからのリクエストを受け、計測情報を付けつつ Backend へ転送するサーバです。疑似的に入力のセキュリティチェックを行います。Frontend の静的ファイルもここ経由で配信されます。
   - Frontend: HTML/JS/CSS などの静的ファイルを提供します。
   - Backend: 実際のビジネスロジックや計測処理を担当し、動的レスポンス（処理時間など）を返します。
