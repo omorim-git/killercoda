@@ -13,6 +13,7 @@ spec:
       labels:
         app: cpu-hog
     spec:
+      terminationGracePeriodSeconds: 1
       nodeSelector:
         kubernetes.io/hostname: node01
       containers:

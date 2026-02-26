@@ -19,7 +19,8 @@
         {
           "title": "トラブル発生2",
           "text": "step3.md",
-          "foreground": "start-trouble2.sh"
+          "foreground": "step3-foreground.sh",
+          "background": "start-trouble2.sh"
         }
       ],
       "finish": {
