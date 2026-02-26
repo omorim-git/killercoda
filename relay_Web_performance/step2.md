@@ -25,7 +25,7 @@ kubectl describe nodes
 
 📌 **補足**
 
-* `describe` は状態だけでなく **イベント（トラブルシュート時に重要）** も確認できる
+* describe は状態だけでなく **イベント（トラブルシュート時に重要）** も確認できる
 * Pod は通常 **Deployment / ReplicaSet によって管理** されている
 
 ---
@@ -45,7 +45,7 @@ kubectl -n latency-demo top pods
 
 📌 **注意点**
 
-* `kubectl top` は **metrics-server がクラスタにデプロイされていることが前提**
+* kubectl top は **metrics-server がクラスタにデプロイされていることが前提**
 * metrics-server が無い場合はエラーになる
 
 ---
@@ -59,7 +59,7 @@ kubectl -n latency-demo describe pod <pod名>
 
 📌 **補足**
 
-* `<pod名>` は以下で確認
+* <pod名> は以下で確認
 
   ```bash
   kubectl get pods -n latency-demo
@@ -77,8 +77,8 @@ kubectl -n latency-demo logs <pod名>
 
 📌 **補足・注意点**
 
-* 複数コンテナを持つ Pod の場合は `-c <container名>`(relay, backend, nginx) が必要
-* 過去のログを見たい場合は `--previous` を使用
+* 複数コンテナを持つ Pod の場合は -c <container名>(relay, backend, nginx) が必要
+* 過去のログを見たい場合は --previous を使用
 
 ---
 
@@ -94,7 +94,7 @@ kubectl -n latency-demo scale deploy/<deploy名> --replicas=0
 
 📌 **補足**
 
-* `<deploy名>` は以下で確認
+* <deploy名> は以下で確認
 
   ```bash
   kubectl -n latency-demo get deploy
@@ -126,9 +126,9 @@ kubectl -n latency-demo exec -it <pod名> -- /bin/bash
 
 📌 **注意点**
 
-* `/bin/bash` が存在しないイメージでは失敗する
+* /bin/bash が存在しないイメージでは失敗する
 
-  * その場合は `/bin/sh` を使用
+  * その場合は /bin/sh を使用
 * 本番環境では **exec ログインを制限している場合** がある
 
 ---
