@@ -10,6 +10,9 @@ kubernetesの構造と役立つコマンド群は以下です。**置き換え�
 ### ノード・Pod・Deployment の状態を確認する
 
 ```bash
+# node01に接続する
+ssh node01
+
 # ノード一覧と詳細情報（IP、OS、バージョンなど）を表示
 kubectl get nodes -o wide
 
