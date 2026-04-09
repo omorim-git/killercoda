@@ -1,0 +1,42 @@
+{
+  "title": "Patroni同期レプリの性能劣化: firewalld + MTU 変更",
+  "description": "バージョンアップ後のデフォルト変更により、同期 COMMIT が遅くなる状況を再現して復旧します。",
+  "details": {
+    "intro": {
+      "text": "intro.md",
+      "foreground": "foreground.sh",
+      "background": "background.sh"
+    },
+    "steps": [
+      {
+        "title": "正常時のベースラインを取る",
+        "text": "step1.md"
+      },
+      {
+        "title": "アップデート後の性能劣化を観測する",
+        "text": "step2.md",
+        "background": "inject-trouble.sh"
+      },
+      {
+        "title": "原因を特定して復旧する",
+        "text": "step3.md",
+        "verify": "verify-step3.sh"
+      }
+    ],
+    "finish": {
+      "text": "finish.md"
+    },
+    "assets": {
+      "host01": [
+        {
+          "file": "scripts/*",
+          "target": "~/kc-patroni-lab",
+          "chmod": "+x"
+        }
+      ]
+    }
+  },
+  "backend": {
+    "imageid": "ubuntu"
+  }
+}
