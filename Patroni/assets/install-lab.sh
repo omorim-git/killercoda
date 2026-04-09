@@ -14,6 +14,33 @@ log() {
   echo "[install] $*"
 }
 
+dump_failure_context() {
+  local role="$1"
+  local ns="$2"
+  local log_path="$3"
+  local data_dir="$4"
+
+  echo "== ${role} patroni log ==" >&2
+  tail -n 200 "$log_path" 2>/dev/null >&2 || true
+
+  echo "== ${role} namespace listen sockets ==" >&2
+  ip netns exec "$ns" ss -lntp >&2 || true
+
+  echo "== ${role} postgres processes ==" >&2
+  ip netns exec "$ns" ps -ef >&2 || true
+
+  echo "== /run/postgresql permissions ==" >&2
+  ls -ld /run/postgresql /var/run/postgresql 2>/dev/null >&2 || true
+
+  echo "== ${role} data directory ==" >&2
+  ls -la "$data_dir" 2>/dev/null >&2 || true
+
+  if compgen -G "${data_dir}/log/*" >/dev/null; then
+    echo "== ${role} postgres log files ==" >&2
+    tail -n 200 "${data_dir}"/log/* 2>/dev/null >&2 || true
+  fi
+}
+
 cleanup_previous() {
   log "Cleaning previous lab state"
 
@@ -80,11 +107,11 @@ bootstrap:
       parameters:
         wal_level: replica
         hot_standby: "on"
-        max_connections: 200
+        max_connections: 50
         max_wal_senders: 10
         max_replication_slots: 10
         wal_keep_size: 256MB
-        shared_buffers: 256MB
+        shared_buffers: 32MB
         synchronous_commit: "on"
   initdb:
     - encoding: UTF8
@@ -118,6 +145,9 @@ postgresql:
       password: rewindpass
   parameters:
     unix_socket_directories: /var/run/postgresql
+    logging_collector: "on"
+    log_directory: log
+    log_filename: postgresql-%a.log
 
 tags:
   nofailover: false
@@ -177,6 +207,7 @@ wait_for_primary() {
     sleep 2
   done
 
+  dump_failure_context "primary" "$PRIMARY_NS" "${LAB_RUNTIME_DIR}/patroni-primary.log" "/var/lib/postgresql/kc-primary"
   echo "primary did not become ready" >&2
   exit 1
 }
@@ -190,6 +221,7 @@ wait_for_sync_standby() {
     sleep 2
   done
 
+  dump_failure_context "standby" "$STANDBY_NS" "${LAB_RUNTIME_DIR}/patroni-standby.log" "/var/lib/postgresql/kc-standby"
   echo "standby did not reach sync state" >&2
   exit 1
 }
@@ -255,6 +287,7 @@ create_ns "$CLIENT_NS" "$VETH_CLIENT" "$CLIENT_IP"
 log "Preparing directories and configs"
 install -d -m 0755 "$LAB_CONF_DIR"
 install -d -o postgres -g postgres -m 0700 /var/lib/postgresql/kc-primary /var/lib/postgresql/kc-standby
+install -d -o postgres -g postgres -m 2775 /run/postgresql
 
 write_patroni_config "primary" "$PRIMARY_IP" "${LAB_CONF_DIR}/patroni-primary.yml" "/var/lib/postgresql/kc-primary" "$PG_MAJOR_VALUE"
 write_patroni_config "standby" "$STANDBY_IP" "${LAB_CONF_DIR}/patroni-standby.yml" "/var/lib/postgresql/kc-standby" "$PG_MAJOR_VALUE"
