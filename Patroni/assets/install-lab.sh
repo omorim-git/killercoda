@@ -21,7 +21,7 @@ dump_failure_context() {
   local data_dir="$4"
 
   echo "== ${role} patroni log ==" >&2
-  tail -n 200 "$log_path" 2>/dev/null >&2 || true
+  tail -n 200 "$log_path" >&2 2>/dev/null || true
 
   echo "== ${role} namespace listen sockets ==" >&2
   ip netns exec "$ns" ss -lntp >&2 || true
@@ -30,14 +30,14 @@ dump_failure_context() {
   ip netns exec "$ns" ps -ef >&2 || true
 
   echo "== /run/postgresql permissions ==" >&2
-  ls -ld /run/postgresql /var/run/postgresql 2>/dev/null >&2 || true
+  ls -ld /run/postgresql /var/run/postgresql >&2 2>/dev/null || true
 
   echo "== ${role} data directory ==" >&2
-  ls -la "$data_dir" 2>/dev/null >&2 || true
+  ls -la "$data_dir" >&2 2>/dev/null || true
 
   if compgen -G "${data_dir}/log/*" >/dev/null; then
     echo "== ${role} postgres log files ==" >&2
-    tail -n 200 "${data_dir}"/log/* 2>/dev/null >&2 || true
+    tail -n 200 "${data_dir}"/log/* >&2 2>/dev/null || true
   fi
 }
 
@@ -192,7 +192,7 @@ start_patroni() {
   local path_env="$5"
 
   nohup ip netns exec "$ns" \
-    env HOME=/var/lib/postgresql PATH="$path_env" \
+    env HOME=/var/lib/postgresql PATH="$path_env" PYTHONUNBUFFERED=1 \
     runuser -u postgres -- patroni "$cfg_path" \
     >"$log_path" 2>&1 &
   echo $! >"$pid_path"
