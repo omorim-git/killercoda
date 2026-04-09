@@ -14,11 +14,18 @@ log() {
   echo "[install] $*"
 }
 
+socket_dir_for_role() {
+  printf '/run/postgresql-%s' "$1"
+}
+
 dump_failure_context() {
   local role="$1"
   local ns="$2"
   local log_path="$3"
   local data_dir="$4"
+  local socket_dir
+
+  socket_dir="$(socket_dir_for_role "$role")"
 
   echo "== ${role} patroni log ==" >&2
   tail -n 200 "$log_path" >&2 2>/dev/null || true
@@ -31,6 +38,9 @@ dump_failure_context() {
 
   echo "== /run/postgresql permissions ==" >&2
   ls -ld /run/postgresql /var/run/postgresql >&2 2>/dev/null || true
+
+  echo "== ${role} socket directory ==" >&2
+  ls -ld "$socket_dir" >&2 2>/dev/null || true
 
   echo "== ${role} data directory ==" >&2
   ls -la "$data_dir" >&2 2>/dev/null || true
@@ -55,6 +65,7 @@ cleanup_previous() {
   ip link del "$BRIDGE_DEV" 2>/dev/null || true
 
   rm -rf "$LAB_RUNTIME_DIR" "$LAB_CONF_DIR" /var/lib/postgresql/kc-primary /var/lib/postgresql/kc-standby
+  rm -rf "$(socket_dir_for_role primary)" "$(socket_dir_for_role standby)"
   mkdir -p "$LAB_RUNTIME_DIR" "$LAB_CONF_DIR"
 }
 
@@ -82,6 +93,9 @@ write_patroni_config() {
   local cfg_path="$3"
   local data_dir="$4"
   local pg_major_value="$5"
+  local socket_dir
+
+  socket_dir="$(socket_dir_for_role "$name")"
 
   cat >"$cfg_path" <<EOF
 scope: kc-sync-lab
@@ -144,7 +158,7 @@ postgresql:
       username: rewind
       password: rewindpass
   parameters:
-    unix_socket_directories: /var/run/postgresql
+    unix_socket_directories: ${socket_dir}
     logging_collector: "on"
     log_directory: log
     log_filename: postgresql-%a.log
@@ -288,6 +302,7 @@ log "Preparing directories and configs"
 install -d -m 0755 "$LAB_CONF_DIR"
 install -d -o postgres -g postgres -m 0700 /var/lib/postgresql/kc-primary /var/lib/postgresql/kc-standby
 install -d -o postgres -g postgres -m 2775 /run/postgresql
+install -d -o postgres -g postgres -m 2775 "$(socket_dir_for_role primary)" "$(socket_dir_for_role standby)"
 
 write_patroni_config "primary" "$PRIMARY_IP" "${LAB_CONF_DIR}/patroni-primary.yml" "/var/lib/postgresql/kc-primary" "$PG_MAJOR_VALUE"
 write_patroni_config "standby" "$STANDBY_IP" "${LAB_CONF_DIR}/patroni-standby.yml" "/var/lib/postgresql/kc-standby" "$PG_MAJOR_VALUE"
