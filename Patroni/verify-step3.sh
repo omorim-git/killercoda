@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-source "$SCRIPT_DIR/scripts/lib.sh"
+LAB_ASSET_DIR="${HOME}/kc-patroni-lab"
+source "$LAB_ASSET_DIR/lib.sh"
 
 issues=()
 

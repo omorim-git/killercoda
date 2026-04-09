@@ -1,10 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LAB_ASSET_DIR="${HOME}/kc-patroni-lab"
+UPDATE_SCRIPT="${LAB_ASSET_DIR}/apply-update.sh"
 
 while [ ! -f /tmp/background-finished ]; do
   sleep 1
 done
 
-bash "$SCRIPT_DIR/scripts/apply-update.sh" >/tmp/kc-patroni-lab-update.log 2>&1
+bash "$UPDATE_SCRIPT" >/tmp/kc-patroni-lab-update.log 2>&1

@@ -29,7 +29,7 @@
     "assets": {
       "host01": [
         {
-          "file": "scripts/*",
+          "file": "*",
           "target": "~/kc-patroni-lab",
           "chmod": "+x"
         }
