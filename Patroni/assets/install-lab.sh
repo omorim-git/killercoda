@@ -193,7 +193,7 @@ start_patroni() {
 
   nohup ip netns exec "$ns" \
     env HOME=/var/lib/postgresql PATH="$path_env" PYTHONUNBUFFERED=1 \
-    runuser -u postgres -- patroni "$cfg_path" \
+    runuser -u postgres -- bash -lc "cd /var/lib/postgresql && exec patroni '$cfg_path'" \
     >"$log_path" 2>&1 &
   echo $! >"$pid_path"
 }
