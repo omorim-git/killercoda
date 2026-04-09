@@ -17,7 +17,7 @@ outfile="${results_dir}/${timestamp}-${label}.log"
 {
   echo "[benchmark] label=${label} duration=${duration}s clients=${clients} jobs=${jobs}"
   ns_exec "$CLIENT_NS" env PGPASSWORD="$APP_PASSWORD" \
-    pgbench -h "$PRIMARY_IP" -p 5432 -U "$APP_USER" -d "$BENCH_DB" -N -T "$duration" -P 5 -c "$clients" -j "$jobs"
+    pgbench -h "$PRIMARY_IP" -p 5432 -U "$APP_USER" -N -T "$duration" -P 5 -c "$clients" -j "$jobs" "$BENCH_DB"
 } | tee "$outfile"
 
 echo "Saved: $outfile"
