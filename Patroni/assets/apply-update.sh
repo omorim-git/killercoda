@@ -36,8 +36,8 @@ ip link set dev "$VETH_STANDBY" mtu 1500
 ip -n "$STANDBY_NS" link set dev eth0 mtu 1500
 
 log "Applying netem delay and loss"
-ip -n "$PRIMARY_NS" tc qdisc replace dev eth0 root netem delay 30ms loss 2%
-ip -n "$STANDBY_NS" tc qdisc replace dev eth0 root netem delay 30ms loss 2%
+ns_exec "$PRIMARY_NS" tc qdisc replace dev eth0 root netem delay 30ms loss 2%
+ns_exec "$STANDBY_NS" tc qdisc replace dev eth0 root netem delay 30ms loss 2%
 
 touch "${LAB_RUNTIME_DIR}/update-applied"
 log "Update state has been applied"
