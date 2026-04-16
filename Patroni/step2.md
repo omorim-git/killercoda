@@ -24,6 +24,13 @@ sudo ip netns exec kc-primary tc -s qdisc show dev eth0
 sudo ip netns exec kc-standby tc -s qdisc show dev eth0
 ```
 
+step 遷移時に background 実行エラーが出た場合は、まず次を確認してください。
+
+```bash
+cat /tmp/kc-patroni-lab-update.log
+ls -l /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
+```
+
 ポイント:
 
 - DB は落ちていない
