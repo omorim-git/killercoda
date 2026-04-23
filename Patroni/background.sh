@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-LAB_ASSET_DIR="${HOME}/kc-patroni-lab"
+LAB_ASSET_DIR="/root/kc-patroni-lab"
 INSTALL_SCRIPT="${LAB_ASSET_DIR}/install-lab.sh"
 LOG_FILE="/tmp/kc-patroni-lab-bootstrap.log"
 FAIL_FILE="/tmp/kc-patroni-lab-bootstrap.failed"

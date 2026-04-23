@@ -18,39 +18,6 @@ socket_dir_for_role() {
   printf '/run/postgresql-%s' "$1"
 }
 
-dump_failure_context() {
-  local role="$1"
-  local ns="$2"
-  local log_path="$3"
-  local data_dir="$4"
-  local socket_dir
-
-  socket_dir="$(socket_dir_for_role "$role")"
-
-  echo "== ${role} patroni log ==" >&2
-  tail -n 200 "$log_path" >&2 2>/dev/null || true
-
-  echo "== ${role} namespace listen sockets ==" >&2
-  ip netns exec "$ns" ss -lntp >&2 || true
-
-  echo "== ${role} postgres processes ==" >&2
-  ip netns exec "$ns" ps -ef >&2 || true
-
-  echo "== /run/postgresql permissions ==" >&2
-  ls -ld /run/postgresql /var/run/postgresql >&2 2>/dev/null || true
-
-  echo "== ${role} socket directory ==" >&2
-  ls -ld "$socket_dir" >&2 2>/dev/null || true
-
-  echo "== ${role} data directory ==" >&2
-  ls -la "$data_dir" >&2 2>/dev/null || true
-
-  if compgen -G "${data_dir}/log/*" >/dev/null; then
-    echo "== ${role} postgres log files ==" >&2
-    tail -n 200 "${data_dir}"/log/* >&2 2>/dev/null || true
-  fi
-}
-
 cleanup_previous() {
   log "Cleaning previous lab state"
 
@@ -121,11 +88,11 @@ bootstrap:
       parameters:
         wal_level: replica
         hot_standby: "on"
-        max_connections: 50
+        max_connections: 200
         max_wal_senders: 10
         max_replication_slots: 10
         wal_keep_size: 256MB
-        shared_buffers: 32MB
+        shared_buffers: 256MB
         synchronous_commit: "on"
   initdb:
     - encoding: UTF8
@@ -159,9 +126,6 @@ postgresql:
       password: rewindpass
   parameters:
     unix_socket_directories: ${socket_dir}
-    logging_collector: "on"
-    log_directory: log
-    log_filename: postgresql-%a.log
 
 tags:
   nofailover: false
@@ -206,8 +170,8 @@ start_patroni() {
   local path_env="$5"
 
   nohup ip netns exec "$ns" \
-    env HOME=/var/lib/postgresql PATH="$path_env" PYTHONUNBUFFERED=1 \
-    runuser -u postgres -- bash -lc "cd /var/lib/postgresql && exec patroni '$cfg_path'" \
+    env HOME=/var/lib/postgresql PATH="$path_env" \
+    runuser -u postgres -- patroni "$cfg_path" \
     >"$log_path" 2>&1 &
   echo $! >"$pid_path"
 }
@@ -221,7 +185,6 @@ wait_for_primary() {
     sleep 2
   done
 
-  dump_failure_context "primary" "$PRIMARY_NS" "${LAB_RUNTIME_DIR}/patroni-primary.log" "/var/lib/postgresql/kc-primary"
   echo "primary did not become ready" >&2
   exit 1
 }
@@ -235,7 +198,6 @@ wait_for_sync_standby() {
     sleep 2
   done
 
-  dump_failure_context "standby" "$STANDBY_NS" "${LAB_RUNTIME_DIR}/patroni-standby.log" "/var/lib/postgresql/kc-standby"
   echo "standby did not reach sync state" >&2
   exit 1
 }

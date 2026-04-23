@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-LAB_ASSET_DIR="${HOME}/kc-patroni-lab"
+LAB_ASSET_DIR="/root/kc-patroni-lab"
 source "$LAB_ASSET_DIR/lib.sh"
 
 issues=()

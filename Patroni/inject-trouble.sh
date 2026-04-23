@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-LAB_ASSET_DIR="${HOME}/kc-patroni-lab"
+LAB_ASSET_DIR="/root/kc-patroni-lab"
 UPDATE_SCRIPT="${LAB_ASSET_DIR}/apply-update.sh"
 LOG_FILE="/tmp/kc-patroni-lab-update.log"
 FAIL_FILE="/tmp/kc-patroni-lab-update.failed"
