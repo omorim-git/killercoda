@@ -30,7 +30,7 @@
       "host01": [
         {
           "file": "assets/*",
-          "target": "/root/kc-patroni-lab",
+          "target": "~/kc-patroni-lab",
           "chmod": "+x"
         }
       ]
