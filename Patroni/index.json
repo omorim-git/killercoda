@@ -29,37 +29,7 @@
     "assets": {
       "host01": [
         {
-          "file": "assets/apply-update.sh",
-          "target": "~/kc-patroni-lab/",
-          "chmod": "+x"
-        },
-        {
-          "file": "assets/benchmark.sh",
-          "target": "~/kc-patroni-lab/",
-          "chmod": "+x"
-        },
-        {
-          "file": "assets/cluster-status.sh",
-          "target": "~/kc-patroni-lab/",
-          "chmod": "+x"
-        },
-        {
-          "file": "assets/compare-results.sh",
-          "target": "~/kc-patroni-lab/",
-          "chmod": "+x"
-        },
-        {
-          "file": "assets/install-lab.sh",
-          "target": "~/kc-patroni-lab/",
-          "chmod": "+x"
-        },
-        {
-          "file": "assets/lib.sh",
-          "target": "~/kc-patroni-lab/",
-          "chmod": "+x"
-        },
-        {
-          "file": "assets/topology.sh",
+          "file": "*",
           "target": "~/kc-patroni-lab/",
           "chmod": "+x"
         }
