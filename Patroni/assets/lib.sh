@@ -16,7 +16,7 @@ K6_JOB_PREFIX="tat-k6"
 NFT_TABLE="kc_tat_lab"
 NFT_INPUT_CHAIN="input"
 NFT_GUARD_CHAIN="api_guard"
-NFT_RULE_COUNT=10000
+NFT_RULE_COUNT=100000
 UPDATE_MARKER="${LAB_RUNTIME_DIR}/update-applied"
 
 run_root() {
