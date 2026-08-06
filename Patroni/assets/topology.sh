@@ -3,17 +3,13 @@ set -euo pipefail
 
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
-cat <<EOF
-namespace     role                        ip
-${CLIENT_NS}   pgbench client               ${CLIENT_IP}
-${PRIMARY_NS}  PostgreSQL + Patroni leader  ${PRIMARY_IP}
-${STANDBY_NS}  PostgreSQL + Patroni standby ${STANDBY_IP}
-${ETCD_NS}     etcd                         ${ETCD_IP}
+printf '%-14s %-30s %s\n' "resource" "role" "location"
+printf '%-14s %-30s %s\n' "$(controlplane_node)" "SUT host + Kubernetes controlplane" "$(controlplane_ip)"
+printf '%-14s %-30s %s\n' "$(worker_node)" "k6 runner node" "$(worker_ip)"
+printf '%-14s %-30s %s\n' "tat-api" "Thin HTTP API" "$(api_url)"
 
-bridge: ${BRIDGE_DEV} (${BRIDGE_IP})
-
-namespace に入る例:
-  sudo ip netns exec ${PRIMARY_NS} bash
-  sudo ip netns exec ${STANDBY_NS} bash
-  sudo ip netns exec ${CLIENT_NS} bash
-EOF
+echo
+echo "確認例:"
+echo "  kubectl get pods -n ${K8S_NAMESPACE} -o wide"
+echo "  kubectl describe node $(controlplane_node)"
+echo "  kubectl describe node $(worker_node)"

@@ -1,6 +1,6 @@
 # 正常時のベースライン
 
-まずは正常時のスループットと同期レプリ状態を確認します。
+まずは正常時の API 応答時間を確認します。
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
@@ -9,13 +9,13 @@
 
 期待する観点:
 
-- `firewalld` は停止している
-- `kc-primary` / `kc-standby` の MTU は `9000`
-- `tc netem` は入っていない
-- Patroni クラスタは `Leader` と `Replica` で安定している
-- `pgbench` の `tps` と `latency average` が基準値になる
+- `tat-api` が `controlplane` に載っている
+- `k6` は `node01` で実行される
+- `nftables` 用の専用 table はまだ存在しない
+- `http_req_duration` の `avg` / `p(95)` が基準値になる
+- `http_req_failed` は `0.00%` 近辺になる
 
-必要なら結果を比較しやすいように、出力されたログファイルの場所を控えてください。
+必要なら結果ファイルの場所を控えてください。
 
 ```bash
 ls -1 ~/kc-patroni-lab/results

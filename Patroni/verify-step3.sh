@@ -6,29 +6,34 @@ source "$LAB_ASSET_DIR/lib.sh"
 
 issues=()
 
-if [[ "$(get_ns_mtu "$STANDBY_NS")" != "9000" ]]; then
-  issues+=("Standby 側の MTU が 9000 に戻っていません。")
+if nft_table_exists; then
+  issues+=("nftables の劣化 table ${NFT_TABLE} が残っています。")
 fi
 
-if [[ "$(get_host_mtu "$VETH_STANDBY")" != "9000" ]]; then
-  issues+=("Standby 側 veth の MTU が 9000 に戻っていません。")
+if ! api_healthy; then
+  issues+=("API が応答していません。")
 fi
 
-if qdisc_has_netem "$PRIMARY_NS"; then
-  issues+=("Primary 側の netem が残っています。")
+after_file="$(find_latest_result "after-update")"
+recovered_file="$(find_latest_result "recovered")"
+
+if [[ -z "$recovered_file" ]]; then
+  issues+=("recovered の benchmark ログがありません。")
 fi
 
-if qdisc_has_netem "$STANDBY_NS"; then
-  issues+=("Standby 側の netem が残っています。")
+if [[ -z "$after_file" ]]; then
+  issues+=("after-update の benchmark ログがありません。")
 fi
 
-if ! ns_exec "$CLIENT_NS" ping -M do -s 8972 -c 1 -W 1 "$STANDBY_IP" >/dev/null 2>&1; then
-  issues+=("Jumbo ping がまだ通りません。")
-fi
+if [[ -n "$after_file" && -n "$recovered_file" ]]; then
+  after_avg="$(extract_k6_stat "$after_file" 'http_req_duration' 'avg')"
+  recovered_avg="$(extract_k6_stat "$recovered_file" 'http_req_duration' 'avg')"
+  after_ms="$(duration_to_ms "${after_avg:-}")"
+  recovered_ms="$(duration_to_ms "${recovered_avg:-}")"
 
-sync_state="$(psql_primary -d postgres -Atqc "select coalesce((select sync_state from pg_stat_replication order by application_name limit 1), '')" 2>/dev/null || true)"
-if [[ "$sync_state" != "sync" ]]; then
-  issues+=("同期レプリケーションが sync 状態ではありません。")
+  if ! awk -v a="$after_ms" -v r="$recovered_ms" 'BEGIN { exit !(a >= 0 && r >= 0 && r < a) }'; then
+    issues+=("recovered の平均 TAT が after-update より改善していません。")
+  fi
 fi
 
 if (( ${#issues[@]} > 0 )); then

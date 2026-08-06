@@ -1,13 +1,13 @@
 # まとめ
 
-今回の遅延は、同期レプリケーションで Primary の COMMIT が Standby 応答待ちになるところへ、アップデート後のネットワーク条件悪化が重なったことが原因です。
+今回の劣化要因は、SUT node の `nftables` に API 向けの大量 rule を入れ、すべての request packet がその評価を受けるようになったことです。
 
 観測できたはずの兆候:
 
-- `firewalld` が有効化されている
-- Standby 側 MTU が `1500` に変わっている
-- `ping -M do -s 8972` が失敗する
-- `tc netem` による遅延 / ロスが入っている
-- `netstat -s` で再送傾向が見える
+- `k6` runner 自体は別ノードにいる
+- API は動作継続している
+- `http_req_failed` は低いまま
+- それでも `http_req_duration` が大きく悪化する
+- `nft list table inet kc_tat_lab` で専用 chain に大量 rule が見える
 
-実運用では、単に DB パラメータや CPU を疑うだけではなく、OS 更新後のデフォルト変更、NIC/MTU、フィルタ、経路上の遅延要因まで含めて切り分ける必要があります。
+実運用では、アプリ内部だけでなく host firewall や packet filtering policy 変更も TAT 劣化要因になります。負荷生成を別ノードに分けると、SUT 側の問題に寄せて観測しやすくなります。

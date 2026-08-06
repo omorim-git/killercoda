@@ -14,318 +14,211 @@ log() {
   echo "[install] $*"
 }
 
-socket_dir_for_role() {
-  printf '/run/postgresql-%s' "$1"
+dump_failure_context() {
+  echo "== kubectl get nodes -o wide ==" >&2
+  kubectl get nodes -o wide >&2 || true
+
+  echo "== kubectl get pods -A -o wide ==" >&2
+  kubectl get pods -A -o wide >&2 || true
+
+  if kubectl get namespace "$K8S_NAMESPACE" >/dev/null 2>&1; then
+    echo "== tat-api describe ==" >&2
+    kctl describe deployment "$API_DEPLOYMENT" >&2 || true
+    kctl describe pod -l app="$API_APP_LABEL" >&2 || true
+
+    echo "== tat-api logs ==" >&2
+    kctl logs deploy/"$API_DEPLOYMENT" >&2 || true
+  fi
+
+  echo "== nftables table ==" >&2
+  run_root nft list table inet "$NFT_TABLE" >&2 2>/dev/null || true
 }
 
-dump_failure_context() {
-  local role="$1"
-  local ns="$2"
-  local log_path="$3"
-  local data_dir="$4"
-  local socket_dir
+trap dump_failure_context ERR
 
-  socket_dir="$(socket_dir_for_role "$role")"
+wait_for_nodes_ready() {
+  log "Waiting for Kubernetes nodes"
+  kubectl wait --for=condition=Ready node --all --timeout=180s >/dev/null
 
-  echo "== ${role} patroni log ==" >&2
-  tail -n 200 "$log_path" >&2 2>/dev/null || true
-
-  echo "== ${role} namespace listen sockets ==" >&2
-  ip netns exec "$ns" ss -lntp >&2 || true
-
-  echo "== ${role} postgres processes ==" >&2
-  ip netns exec "$ns" ps -ef >&2 || true
-
-  echo "== /run/postgresql permissions ==" >&2
-  ls -ld /run/postgresql /var/run/postgresql >&2 2>/dev/null || true
-
-  echo "== ${role} socket directory ==" >&2
-  ls -ld "$socket_dir" >&2 2>/dev/null || true
-
-  echo "== ${role} data directory ==" >&2
-  ls -la "$data_dir" >&2 2>/dev/null || true
-
-  if compgen -G "${data_dir}/log/*" >/dev/null; then
-    echo "== ${role} postgres log files ==" >&2
-    tail -n 200 "${data_dir}"/log/* >&2 2>/dev/null || true
+  if [[ -z "$(worker_node)" ]]; then
+    echo "worker node not found" >&2
+    exit 1
   fi
 }
 
 cleanup_previous() {
   log "Cleaning previous lab state"
 
-  pkill -f "${LAB_CONF_DIR}/patroni-primary.yml" 2>/dev/null || true
-  pkill -f "${LAB_CONF_DIR}/patroni-standby.yml" 2>/dev/null || true
-  pkill -f "${LAB_RUNTIME_DIR}/etcd-data" 2>/dev/null || true
-  sleep 2
+  kubectl delete namespace "$K8S_NAMESPACE" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  run_root nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
 
-  for ns in "$PRIMARY_NS" "$STANDBY_NS" "$ETCD_NS" "$CLIENT_NS"; do
-    ip netns del "$ns" 2>/dev/null || true
-  done
-  ip link del "$BRIDGE_DEV" 2>/dev/null || true
-
-  rm -rf "$LAB_RUNTIME_DIR" "$LAB_CONF_DIR" /var/lib/postgresql/kc-primary /var/lib/postgresql/kc-standby
-  rm -rf "$(socket_dir_for_role primary)" "$(socket_dir_for_role standby)"
-  mkdir -p "$LAB_RUNTIME_DIR" "$LAB_CONF_DIR"
+  rm -rf "$LAB_RUNTIME_DIR"
+  mkdir -p "$LAB_RUNTIME_DIR" "${LAB_HOME_DIR}/results"
+  rm -f /tmp/kc-patroni-lab-update.log /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 }
 
-create_ns() {
-  local ns="$1"
-  local host_if="$2"
-  local ip_addr="$3"
+apply_api_manifest() {
+  local cp_node
 
-  ip netns add "$ns"
-  ip link add "$host_if" type veth peer name eth0 netns "$ns"
-  ip link set dev "$host_if" mtu 9000
-  ip link set dev "$host_if" master "$BRIDGE_DEV"
-  ip link set dev "$host_if" up
+  cp_node="$(controlplane_node)"
 
-  ip -n "$ns" link set dev lo up
-  ip -n "$ns" link set dev eth0 mtu 9000
-  ip -n "$ns" addr add "$ip_addr/24" dev eth0
-  ip -n "$ns" link set dev eth0 up
-  ip -n "$ns" route add default via "${BRIDGE_IP%/*}"
-}
+  cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${K8S_NAMESPACE}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tat-api-code
+  namespace: ${K8S_NAMESPACE}
+data:
+  server.py: |
+    import json
+    import os
+    import socket
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-write_patroni_config() {
-  local name="$1"
-  local ip_addr="$2"
-  local cfg_path="$3"
-  local data_dir="$4"
-  local pg_major_value="$5"
-  local socket_dir
+    PORT = int(os.environ.get("PORT", "8080"))
+    SLEEP_MS = float(os.environ.get("SLEEP_MS", "2.5"))
 
-  socket_dir="$(socket_dir_for_role "$name")"
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
 
-  cat >"$cfg_path" <<EOF
-scope: kc-sync-lab
-namespace: /service/
-name: ${name}
+        def _write_json(self, status_code, payload):
+            body = json.dumps(payload).encode()
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
 
-restapi:
-  listen: ${ip_addr}:8008
-  connect_address: ${ip_addr}:8008
+        def log_message(self, fmt, *args):
+            return
 
-etcd:
-  hosts: ${ETCD_IP}:2379
+        def do_GET(self):
+            started = time.perf_counter()
+            if self.path == "/healthz":
+                self._write_json(200, {"status": "ok", "host": socket.gethostname()})
+                return
 
-bootstrap:
-  dcs:
-    ttl: 30
-    loop_wait: 10
-    retry_timeout: 10
-    synchronous_mode: true
-    synchronous_mode_strict: true
-    postgresql:
-      use_pg_rewind: true
-      parameters:
-        wal_level: replica
-        hot_standby: "on"
-        max_connections: 50
-        max_wal_senders: 10
-        max_replication_slots: 10
-        wal_keep_size: 256MB
-        shared_buffers: 32MB
-        synchronous_commit: "on"
-  initdb:
-    - encoding: UTF8
-    - data-checksums
-  users:
-    ${APP_USER}:
-      password: ${APP_PASSWORD}
-      options:
-        - createdb
-        - createrole
-  pg_hba:
-    - host all all 10.66.0.0/24 md5
-    - host replication replicator 10.66.0.0/24 md5
-    - host all all 127.0.0.1/32 trust
+            if self.path.startswith("/txn"):
+                if SLEEP_MS > 0:
+                    time.sleep(SLEEP_MS / 1000.0)
 
-postgresql:
-  listen: ${ip_addr}:5432
-  connect_address: ${ip_addr}:5432
-  data_dir: ${data_dir}
-  bin_dir: /usr/lib/postgresql/${pg_major_value}/bin
-  pgpass: /var/lib/postgresql/.pgpass
-  authentication:
-    replication:
-      username: replicator
-      password: replpass
-    superuser:
-      username: postgres
-      password: ${SUPER_PASSWORD}
-    rewind:
-      username: rewind
-      password: rewindpass
-  parameters:
-    unix_socket_directories: ${socket_dir}
-    logging_collector: "on"
-    log_directory: log
-    log_filename: postgresql-%a.log
+                elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
+                self._write_json(
+                    200,
+                    {
+                        "status": "ok",
+                        "host": socket.gethostname(),
+                        "service_time_ms": elapsed_ms,
+                    },
+                )
+                return
 
-tags:
-  nofailover: false
-  noloadbalance: false
-  clonefrom: false
-  nosync: false
+            self._write_json(404, {"status": "not-found"})
+
+    if __name__ == "__main__":
+        server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+        server.serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${API_DEPLOYMENT}
+  namespace: ${K8S_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${API_APP_LABEL}
+  template:
+    metadata:
+      labels:
+        app: ${API_APP_LABEL}
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ${cp_node}
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: api
+          image: python:3.12-slim
+          imagePullPolicy: IfNotPresent
+          command: ["python", "/app/server.py"]
+          env:
+            - name: PORT
+              value: "${API_PORT}"
+            - name: SLEEP_MS
+              value: "2.5"
+          ports:
+            - containerPort: ${API_PORT}
+          readinessProbe:
+            httpGet:
+              path: ${API_HEALTH_PATH}
+              port: ${API_PORT}
+            initialDelaySeconds: 2
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: ${API_HEALTH_PATH}
+              port: ${API_PORT}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: code
+              mountPath: /app
+      volumes:
+        - name: code
+          configMap:
+            name: tat-api-code
 EOF
 }
 
-start_etcd() {
-  log "Starting etcd"
-  nohup ip netns exec "$ETCD_NS" \
-    etcd \
-      --name kc-etcd \
-      --data-dir "${LAB_RUNTIME_DIR}/etcd-data" \
-      --enable-v2=true \
-      --listen-client-urls "http://${ETCD_IP}:2379" \
-      --advertise-client-urls "http://${ETCD_IP}:2379" \
-      --listen-peer-urls "http://${ETCD_IP}:2380" \
-      --initial-advertise-peer-urls "http://${ETCD_IP}:2380" \
-      --initial-cluster "kc-etcd=http://${ETCD_IP}:2380" \
-      --initial-cluster-state new \
-      >"${LAB_RUNTIME_DIR}/etcd.log" 2>&1 &
-  echo $! >"${LAB_RUNTIME_DIR}/etcd.pid"
-
-  for _ in $(seq 1 30); do
-    if ETCDCTL_API=3 etcdctl --endpoints="$ETCDCTL_ENDPOINT" endpoint health >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 2
-  done
-
-  echo "etcd did not become healthy" >&2
-  exit 1
-}
-
-start_patroni() {
-  local ns="$1"
-  local cfg_path="$2"
-  local log_path="$3"
-  local pid_path="$4"
-  local path_env="$5"
-
-  nohup ip netns exec "$ns" \
-    env HOME=/var/lib/postgresql PATH="$path_env" PYTHONUNBUFFERED=1 \
-    runuser -u postgres -- bash -lc "cd /var/lib/postgresql && exec patroni '$cfg_path'" \
-    >"$log_path" 2>&1 &
-  echo $! >"$pid_path"
-}
-
-wait_for_primary() {
-  log "Waiting for primary"
-  for _ in $(seq 1 60); do
-    if psql_primary -d postgres -Atqc "select pg_is_in_recovery()" 2>/dev/null | grep -qx 'f'; then
-      return 0
-    fi
-    sleep 2
-  done
-
-  dump_failure_context "primary" "$PRIMARY_NS" "${LAB_RUNTIME_DIR}/patroni-primary.log" "/var/lib/postgresql/kc-primary"
-  echo "primary did not become ready" >&2
-  exit 1
-}
-
-wait_for_sync_standby() {
-  log "Waiting for synchronous standby"
-  for _ in $(seq 1 90); do
-    if psql_primary -d postgres -Atqc "select coalesce((select sync_state from pg_stat_replication order by application_name limit 1), '')" 2>/dev/null | grep -qx 'sync'; then
-      return 0
-    fi
-    sleep 2
-  done
-
-  dump_failure_context "standby" "$STANDBY_NS" "${LAB_RUNTIME_DIR}/patroni-standby.log" "/var/lib/postgresql/kc-standby"
-  echo "standby did not reach sync state" >&2
-  exit 1
-}
-
-initialize_benchmark_db() {
-  log "Initializing pgbench database"
-  ns_exec "$CLIENT_NS" env PGPASSWORD="$APP_PASSWORD" dropdb --if-exists -h "$PRIMARY_IP" -p 5432 -U "$APP_USER" "$BENCH_DB" >/dev/null 2>&1 || true
-  ns_exec "$CLIENT_NS" env PGPASSWORD="$APP_PASSWORD" createdb -h "$PRIMARY_IP" -p 5432 -U "$APP_USER" "$BENCH_DB"
-  ns_exec "$CLIENT_NS" env PGPASSWORD="$APP_PASSWORD" \
-    pgbench -i -s 10 -h "$PRIMARY_IP" -p 5432 -U "$APP_USER" "$BENCH_DB" \
-    >"${LAB_RUNTIME_DIR}/pgbench-init.log" 2>&1
-}
-
-log "Installing packages"
+log "Installing host dependencies"
 apt-get update
-apt-get install -y --no-install-recommends \
-  iproute2 \
-  iputils-ping \
-  net-tools \
-  jq \
-  postgresql \
-  postgresql-contrib \
-  patroni \
-  etcd-server \
-  etcd-client \
-  firewalld \
-  procps
+apt-get install -y --no-install-recommends curl jq nftables ca-certificates
 
-log "Stopping default services"
-systemctl stop postgresql 2>/dev/null || true
-systemctl disable postgresql 2>/dev/null || true
-systemctl stop patroni 2>/dev/null || true
-systemctl disable patroni 2>/dev/null || true
-systemctl stop etcd 2>/dev/null || true
-systemctl disable etcd 2>/dev/null || true
-systemctl stop firewalld 2>/dev/null || true
-systemctl disable firewalld 2>/dev/null || true
-
-if command -v pg_lsclusters >/dev/null 2>&1; then
-  while read -r ver name _; do
-    [[ -n "${ver:-}" ]] || continue
-    pg_dropcluster --stop "$ver" "$name" 2>/dev/null || true
-  done < <(pg_lsclusters --no-header 2>/dev/null || true)
-fi
-
+wait_for_nodes_ready
 cleanup_previous
 
-PG_MAJOR_VALUE="$(psql -V | awk '{print $3}' | cut -d. -f1)"
-echo "$PG_MAJOR_VALUE" >"${LAB_RUNTIME_DIR}/pg_major"
-PATH_ENV="/usr/lib/postgresql/${PG_MAJOR_VALUE}/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+log "Recording cluster topology"
+printf '%s\n' "$(controlplane_node)" >"${LAB_RUNTIME_DIR}/controlplane_node"
+printf '%s\n' "$(worker_node)" >"${LAB_RUNTIME_DIR}/worker_node"
+printf '%s\n' "$(controlplane_ip)" >"${LAB_RUNTIME_DIR}/controlplane_ip"
+printf '%s\n' "$(worker_ip)" >"${LAB_RUNTIME_DIR}/worker_ip"
 
-log "Creating bridge and namespaces"
-ip link add "$BRIDGE_DEV" type bridge
-ip link set dev "$BRIDGE_DEV" mtu 9000
-ip addr add "$BRIDGE_IP" dev "$BRIDGE_DEV"
-ip link set dev "$BRIDGE_DEV" up
+log "Deploying API pod on controlplane"
+apply_api_manifest
+kubectl rollout status -n "$K8S_NAMESPACE" deployment/"$API_DEPLOYMENT" --timeout=180s >/dev/null
 
-create_ns "$PRIMARY_NS" "$VETH_PRIMARY" "$PRIMARY_IP"
-create_ns "$STANDBY_NS" "$VETH_STANDBY" "$STANDBY_IP"
-create_ns "$ETCD_NS" "$VETH_ETCD" "$ETCD_IP"
-create_ns "$CLIENT_NS" "$VETH_CLIENT" "$CLIENT_IP"
+for _ in $(seq 1 30); do
+  if api_healthy; then
+    break
+  fi
+  sleep 2
+done
 
-log "Preparing directories and configs"
-install -d -m 0755 "$LAB_CONF_DIR"
-install -d -o postgres -g postgres -m 0700 /var/lib/postgresql/kc-primary /var/lib/postgresql/kc-standby
-install -d -o postgres -g postgres -m 2775 /run/postgresql
-install -d -o postgres -g postgres -m 2775 "$(socket_dir_for_role primary)" "$(socket_dir_for_role standby)"
-
-write_patroni_config "primary" "$PRIMARY_IP" "${LAB_CONF_DIR}/patroni-primary.yml" "/var/lib/postgresql/kc-primary" "$PG_MAJOR_VALUE"
-write_patroni_config "standby" "$STANDBY_IP" "${LAB_CONF_DIR}/patroni-standby.yml" "/var/lib/postgresql/kc-standby" "$PG_MAJOR_VALUE"
-
-chown -R postgres:postgres "$LAB_CONF_DIR" /var/lib/postgresql/kc-primary /var/lib/postgresql/kc-standby
-
-rm -f "${LAB_RUNTIME_DIR}/update-applied"
-
-start_etcd
-
-log "Starting Patroni primary"
-start_patroni "$PRIMARY_NS" "${LAB_CONF_DIR}/patroni-primary.yml" "${LAB_RUNTIME_DIR}/patroni-primary.log" "${LAB_RUNTIME_DIR}/patroni-primary.pid" "$PATH_ENV"
-wait_for_primary
-
-log "Starting Patroni standby"
-start_patroni "$STANDBY_NS" "${LAB_CONF_DIR}/patroni-standby.yml" "${LAB_RUNTIME_DIR}/patroni-standby.log" "${LAB_RUNTIME_DIR}/patroni-standby.pid" "$PATH_ENV"
-wait_for_sync_standby
-
-initialize_benchmark_db
-
-log "Running smoke benchmark"
-ns_exec "$CLIENT_NS" env PGPASSWORD="$APP_PASSWORD" \
-  pgbench -h "$PRIMARY_IP" -p 5432 -U "$APP_USER" -N -T 5 -c 4 -j 2 "$BENCH_DB" \
-  >"${LAB_RUNTIME_DIR}/smoke.log" 2>&1
+api_healthy
+run_root nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
+rm -f "$UPDATE_MARKER"
 
 log "Lab is ready"

@@ -1,6 +1,6 @@
 {
-  "title": "Patroni同期レプリの性能劣化: firewalld + MTU 変更",
-  "description": "バージョンアップ後のデフォルト変更により、同期 COMMIT が遅くなる状況を再現して復旧します。",
+  "title": "k6 TAT 劣化: nftables ブラックリスト肥大化",
+  "description": "API の TAT が nftables の大量ルールにより劣化する状況を、SUT と k6 runner を別ノードに分けて観測します。",
   "details": {
     "intro": {
       "text": "intro.md",
@@ -13,7 +13,7 @@
         "text": "step1.md"
       },
       {
-        "title": "アップデート後の性能劣化を観測する",
+        "title": "nftables 投入後の TAT 劣化を観測する",
         "text": "step2.md",
         "background": "inject-trouble.sh"
       },
@@ -30,13 +30,13 @@
       "host01": [
         {
           "file": "*",
-          "target": "~/kc-patroni-lab/",
+          "target": "/root/kc-patroni-lab",
           "chmod": "+x"
         }
       ]
     }
   },
   "backend": {
-    "imageid": "ubuntu"
+    "imageid": "kubernetes-kubeadm-2nodes"
   }
 }

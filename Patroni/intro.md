@@ -1,19 +1,17 @@
 # シナリオ概要
 
-この演習では、Patroni の同期レプリケーション構成で「OS バージョンアップ後に急に遅くなった」状況を調査します。
+この演習では、`kubernetes-kubeadm-2nodes` 環境で次の構成を作り、`nftables` の大量ルールにより API の TAT が劣化する状況を観測します。
 
-Killercoda 上では 1 台の `ubuntu` ホストを 4 つの Linux network namespace に分け、次のノードを擬似的に作っています。
+- `controlplane`: SUT を置くノード
+- `node01`: `k6` runner を置くノード
+- `tat-api`: controlplane 上で `hostNetwork` で動く薄い HTTP API
+- `k6`: node01 上で Job として実行される負荷試験
 
-- `kc-primary`: PostgreSQL + Patroni の Primary
-- `kc-standby`: PostgreSQL + Patroni の Standby
-- `kc-etcd`: Patroni の DCS 用 etcd
-- `kc-client`: `pgbench` を実行するクライアント
-
-準備が終わったら、まずトポロジとクラスタ状態を確認してください。
+準備が終わったら、まずトポロジと状態を確認してください。
 
 ```bash
 ~/kc-patroni-lab/topology.sh
 ~/kc-patroni-lab/cluster-status.sh
 ```
 
-次のステップでは正常時のベースラインを取得します。
+次のステップでは正常時の TAT ベースラインを取得します。

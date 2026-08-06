@@ -1,12 +1,12 @@
-# アップデート後の性能劣化
+# nftables 投入後の TAT 劣化
 
-このステップに進んだ時点で、夜間アップデートを模した変更が自動適用されています。
+このステップに進んだ時点で、controlplane の API 入口に `nftables` の大量ルールが自動投入されています。
 
 適用された内容:
 
-- `firewalld` の有効化
-- Standby 側 MTU の `9000 -> 1500` 変更
-- Primary / Standby の通信に `tc netem` で遅延とロスを付与
+- API ポート `8080` 宛て packet を専用 chain に誘導
+- 実際には一致しない blacklist ルールを大量に追加
+- `node01` からの k6 リクエストはその評価コストを毎回受ける
 
 まずは現象を観測してください。
 
@@ -18,10 +18,9 @@
 追加で次の観点も確認すると切り分けしやすくなります。
 
 ```bash
-sudo ip netns exec kc-client ping -M do -s 8972 -c 2 10.66.0.12
-sudo ip netns exec kc-primary netstat -s | egrep -i 'retrans|segments retransmitted'
-sudo ip netns exec kc-primary tc -s qdisc show dev eth0
-sudo ip netns exec kc-standby tc -s qdisc show dev eth0
+sudo nft list table inet kc_tat_lab
+curl -sS "$(~/kc-patroni-lab/topology.sh | awk '/tat-api/ {print $3}')" | jq .
+kubectl get jobs -n tat-lab -o wide
 ```
 
 step 遷移時に background 実行エラーが出た場合は、まず次を確認してください。
@@ -33,7 +32,7 @@ ls -l /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 
 ポイント:
 
-- DB は落ちていない
-- すぐにエラーにもならない
-- CPU ボトルネックにも見えにくい
-- それでも COMMIT 待ちで体感的に遅い
+- API 自体は動いている
+- `http_req_failed` はほぼ増えない
+- それでも `http_req_duration` が悪化する
+- k6 runner は別ノードなので、SUT node の CPU 競合とは切り分けやすい
