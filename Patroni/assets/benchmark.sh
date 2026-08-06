@@ -5,7 +5,7 @@ source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
 label="${1:-manual}"
 duration="${2:-20}"
-rate="${3:-500}"
+rate="${3:-300}"
 pre_allocated_vus="${4:-40}"
 max_vus="${5:-120}"
 safe_label="$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
