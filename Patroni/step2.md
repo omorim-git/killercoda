@@ -12,7 +12,7 @@
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
-~/kc-patroni-lab/benchmark.sh after-update 20
+~/kc-patroni-lab/benchmark.sh after-update 200
 ```
 
 追加で次の観点も確認すると切り分けしやすくなります。
@@ -36,3 +36,4 @@ ls -l /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 - `http_req_failed` はほぼ増えない
 - それでも `http_req_duration` が悪化する
 - k6 runner は別ノードなので、SUT node の CPU 競合とは切り分けやすい
+- `benchmark.sh <label> <rate>` で、時間ではなく到達レートを指定する

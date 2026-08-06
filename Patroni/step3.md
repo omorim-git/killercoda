@@ -21,7 +21,7 @@ sudo nft delete table inet kc_tat_lab
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
-~/kc-patroni-lab/benchmark.sh recovered 20
+~/kc-patroni-lab/benchmark.sh recovered 200
 ~/kc-patroni-lab/compare-results.sh
 ```
 
