@@ -23,13 +23,7 @@ echo "worker node=$(worker_node)"
 kubectl get jobs -n "$K8S_NAMESPACE" -o wide 2>/dev/null || true
 echo
 
-echo "== nftables =="
-if nft_table_exists; then
-  echo "state=degraded"
-  echo "table=${NFT_TABLE}"
-  echo "rule_count=$(nft_rule_count)"
-else
-  echo "state=baseline"
-  echo "table=absent"
-  echo "rule_count=0"
-fi
+echo "== Host / Service Summary =="
+echo "update_state=$(update_state)"
+latest_results_count="$(find "${LAB_HOME_DIR}/results" -maxdepth 1 -type f -name '*.log' 2>/dev/null | wc -l)"
+echo "latest_results=${latest_results_count:-0}"

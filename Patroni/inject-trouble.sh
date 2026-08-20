@@ -29,3 +29,5 @@ if ! bash "$UPDATE_SCRIPT" >"$LOG_FILE" 2>&1; then
 fi
 
 touch "$DONE_FILE"
+sleep 1
+exit 0

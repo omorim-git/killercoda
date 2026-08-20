@@ -8,9 +8,15 @@ interval_seconds="${2:-5}"
 
 print_snapshot() {
   local now
+  local vmstat_line
+  local mem_line
 
   now="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+  vmstat_line="$(vmstat 1 2 | tail -n 1 | tr -s ' ')"
+  mem_line="$(free -m | awk '/^Mem:/ {printf "used_mb=%s free_mb=%s available_mb=%s", $3, $4, $7}')"
+
   echo "== Resource Snapshot @ ${now} =="
+  echo "summary: vmstat=${vmstat_line} | ${mem_line}"
   echo
 
   echo "== Kubernetes Node Metrics =="
@@ -30,7 +36,7 @@ print_snapshot() {
   echo
 
   echo "== Host CPU / Memory (controlplane) =="
-  vmstat 1 2 | tail -n 1
+  printf '%s\n' "$vmstat_line"
   free -m
   echo
 

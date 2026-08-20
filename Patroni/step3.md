@@ -1,31 +1,38 @@
-# 調査して復旧する
+# 解答例と復旧
 
-性能劣化の原因を特定し、正常時に近い TAT に戻してください。
+今回の原因は、controlplane 側 host OS の `nftables` に API 向けの大量ルールが入っていたことです。  
+request ごとにその評価コストが乗るため、エラー率は高くないのに TAT と `dropped_iterations` が悪化していました。
 
-よく見るポイント:
+確認方法:
 
 ```bash
-~/kc-patroni-lab/cluster-status.sh
 sudo nft list table inet kc_tat_lab
 sudo nft list ruleset | less
-kubectl get pods -n tat-lab -o wide
+sudo nft list chain inet kc_tat_lab api_guard | head
+sudo nft list chain inet kc_tat_lab api_guard | grep -c 'ip saddr '
 ```
 
-復旧の一例:
+復旧方法:
 
 ```bash
 sudo nft delete table inet kc_tat_lab
 ```
 
-復旧できたかは次で確認します。
+復旧確認:
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
-~/kc-patroni-lab/benchmark.sh recovered 200
+~/kc-patroni-lab/benchmark.sh recovered 50
 ~/kc-patroni-lab/compare-results.sh
 ```
 
-`Check` は次の状態を見ています。
+必要なら同じレート列で再比較します。
+
+```bash
+~/kc-patroni-lab/rate-sweep.sh recovered-sweep 30 40 50 75 100
+```
+
+`Check` は次を見ています。
 
 - `kc_tat_lab` table が消えている
 - API がまだ応答している
