@@ -94,7 +94,7 @@ nft_rule_count() {
     return 0
   fi
 
-  run_root nft list chain inet "$NFT_TABLE" "$NFT_GUARD_CHAIN" 2>/dev/null | awk '/ip saddr 198\.18\./ {c++} END {print c+0}'
+  run_root nft list chain inet "$NFT_TABLE" "$NFT_GUARD_CHAIN" 2>/dev/null | awk '/ip saddr / {c++} END {print c+0}'
 }
 
 update_state() {
@@ -117,6 +117,18 @@ extract_k6_failed_rate() {
   local file="$1"
 
   sed -n 's/.*http_req_failed.*: *\([^ ]*\).*/\1/p' "$file" | head -n 1
+}
+
+extract_k6_dropped_iterations() {
+  local file="$1"
+
+  sed -n 's/.*dropped_iterations.*: *\([0-9][0-9]*\).*/\1/p' "$file" | head -n 1
+}
+
+extract_k6_http_reqs_rate() {
+  local file="$1"
+
+  sed -n 's/.*http_reqs.*: *[0-9][0-9]* *\([^ ]*\/s\).*/\1/p' "$file" | head -n 1
 }
 
 duration_to_ms() {
@@ -163,4 +175,3 @@ find_latest_result() {
 
   ls -1t "${LAB_HOME_DIR}/results/"*-"${label}".log 2>/dev/null | head -n 1
 }
-

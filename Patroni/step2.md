@@ -12,7 +12,7 @@
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
-~/kc-patroni-lab/benchmark.sh after-update 200
+~/kc-patroni-lab/benchmark.sh after-update 50
 ```
 
 追加で次の観点も確認すると切り分けしやすくなります。
@@ -37,3 +37,22 @@ ls -l /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 - それでも `http_req_duration` が悪化する
 - k6 runner は別ノードなので、SUT node の CPU 競合とは切り分けやすい
 - `benchmark.sh <label> <rate>` で、時間ではなく到達レートを指定する
+
+`dropped_iterations` が出始めるレート差を見せたい場合は、同じレート列で比較します。
+
+```bash
+~/kc-patroni-lab/rate-sweep.sh after-update-sweep 30 40 50 75 100
+~/kc-patroni-lab/compare-results.sh
+```
+
+負荷中のリソース状況も、別端末で合わせて取ると切り分けしやすくなります。
+
+```bash
+~/kc-patroni-lab/watch-resources.sh after-update-resources 30 5
+```
+
+見せたいポイント:
+
+- TAT は大きく悪化する
+- `dropped_iterations` が出始める rate は小さくなる
+- それでも CPU / メモリ / ディスク I/O は主因に見えにくい

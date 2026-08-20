@@ -195,7 +195,7 @@ EOF
 
 log "Installing host dependencies"
 apt-get update
-apt-get install -y --no-install-recommends curl jq nftables ca-certificates
+apt-get install -y --no-install-recommends curl jq nftables ca-certificates procps sysstat
 
 wait_for_nodes_ready
 cleanup_previous

@@ -4,7 +4,7 @@
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
-~/kc-patroni-lab/benchmark.sh baseline 200
+~/kc-patroni-lab/benchmark.sh baseline 50
 ```
 
 期待する観点:
@@ -21,3 +21,17 @@
 ```bash
 ls -1 ~/kc-patroni-lab/results
 ```
+
+単一点の TAT だけでなく、drop が出始める負荷レートも見たい場合は次を使います。
+
+```bash
+~/kc-patroni-lab/rate-sweep.sh baseline-sweep 30 40 50 75 100
+```
+
+負荷中のリソース状況も見たい場合は、別端末で次を実行します。
+
+```bash
+~/kc-patroni-lab/watch-resources.sh baseline-resources 30 5
+```
+
+ここで見たいのは、TAT が悪化しても CPU/メモリ/ディスク I/O が極端には張り付かないことです。

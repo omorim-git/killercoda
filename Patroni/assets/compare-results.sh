@@ -8,15 +8,21 @@ summary() {
   local avg
   local p95
   local failed
+  local dropped
+  local reqs_rate
 
   avg="$(extract_k6_stat "$file" 'http_req_duration' 'avg')"
   p95="$(extract_k6_stat "$file" 'http_req_duration' 'p\(95\)')"
   failed="$(extract_k6_failed_rate "$file")"
+  dropped="$(extract_k6_dropped_iterations "$file")"
+  reqs_rate="$(extract_k6_http_reqs_rate "$file")"
 
   printf '%s\n' "file: $file"
   printf '%s\n' "  http_req_duration avg: ${avg:-n/a}"
   printf '%s\n' "  http_req_duration p95: ${p95:-n/a}"
   printf '%s\n' "  http_req_failed: ${failed:-n/a}"
+  printf '%s\n' "  dropped_iterations: ${dropped:-0}"
+  printf '%s\n' "  http_reqs rate: ${reqs_rate:-n/a}"
 }
 
 mapfile -t files < <(printf '%s\n' "$@" | sed '/^$/d')
