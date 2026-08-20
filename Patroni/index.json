@@ -13,12 +13,12 @@
         "text": "step1.md"
       },
       {
-        "title": "nftables 投入後の TAT 劣化を観測する",
+        "title": "性能劣化を解析して原因を特定する",
         "text": "step2.md",
         "background": "inject-trouble.sh"
       },
       {
-        "title": "原因を特定して復旧する",
+        "title": "解答例と復旧手順を確認する",
         "text": "step3.md",
         "verify": "verify-step3.sh"
       }
