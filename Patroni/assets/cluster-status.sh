@@ -24,6 +24,5 @@ kubectl get jobs -n "$K8S_NAMESPACE" -o wide 2>/dev/null || true
 echo
 
 echo "== Host / Service Summary =="
-echo "update_state=$(update_state)"
 latest_results_count="$(find "${LAB_HOME_DIR}/results" -maxdepth 1 -type f -name '*.log' 2>/dev/null | wc -l)"
 echo "latest_results=${latest_results_count:-0}"

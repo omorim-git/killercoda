@@ -11,7 +11,6 @@
 
 - `tat-api` が `controlplane` に載っている
 - `k6` は `node01` で実行される
-- `nftables` 用の専用 table はまだ存在しない
 - 既定では 20 秒間、指定した `rate` で負荷をかける
 - `http_req_duration` の `avg` / `p(95)` が基準値になる
 - `http_req_failed` は `0.00%` 近辺になる
@@ -34,4 +33,4 @@ ls -1 ~/kc-patroni-lab/results
 ~/kc-patroni-lab/watch-resources.sh baseline-resources 30 5
 ```
 
-ここで見たいのは、TAT が悪化しても CPU/メモリ/ディスク I/O が極端には張り付かないことです。
+CPU、メモリ、ディスク I/O の正常時の値を記録してください。後の調査では、同じ負荷条件で取得した値と比較します。

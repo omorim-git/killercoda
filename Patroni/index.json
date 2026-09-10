@@ -1,6 +1,6 @@
 {
-  "title": "k6 TAT 劣化: nftables ブラックリスト肥大化",
-  "description": "API の TAT が nftables の大量ルールにより劣化する状況を、SUT と k6 runner を別ノードに分けて観測します。",
+  "title": "API が遅い：原因不明の性能劣化を調査する",
+  "description": "API の応答遅延の問い合わせを受け、正常時との比較、負荷試験、ログとリソースの観測から原因を特定し、復旧を検証する演習です。",
   "details": {
     "intro": {
       "text": "intro.md",
