@@ -35,8 +35,10 @@ if sys.argv[1] == 'collect':
         if total <= 0:
             previous = current
             continue
+        available_ticks = total - delta[7]
+        busy_ticks = total - delta[3] - delta[4] - delta[7]
         record = {'start': start, 'end': end,
-                  'cpu_busy_pct': 100 * (total - delta[3] - delta[4]) / total,
+                  'cpu_busy_pct': 100 * busy_ticks / available_ticks if available_ticks > 0 else 0,
                   'cpu_iowait_pct': 100 * delta[4] / total,
                   'cpu_steal_pct': 100 * delta[7] / total,
                   'memory_available_mib': memory['MemAvailable'] / 1024,
