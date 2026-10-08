@@ -34,7 +34,7 @@ for rate in "${rates[@]}"; do
   failed="$(extract_k6_failed_rate "$logfile")"
   dropped="$(extract_k6_dropped_iterations "$logfile")"
   reqs_rate="$(extract_k6_http_reqs_rate "$logfile")"
-  resource_overview="$("${BASH_SOURCE%/*}/resource-status.sh" 1 5 | awk '/^summary:/ {print; exit}')"
+  resource_overview="$("${BASH_SOURCE%/*}/resource-status.sh" 1 5 | awk '/^summary:/ && !seen {print; seen=1}')"
 
   printf '%-14s %-8s %-12s %-12s %-12s %-10s %-12s\n' \
     "$run_label" \

@@ -41,11 +41,11 @@ print_snapshot() {
   echo
 
   echo "== Top Processes by CPU =="
-  ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu | head -n 8
+  ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu | sed -n '1,8p'
   echo
 
   echo "== Top Processes by Memory =="
-  ps -eo pid,comm,%cpu,%mem,rss --sort=-%mem | head -n 8
+  ps -eo pid,comm,%cpu,%mem,rss --sort=-%mem | sed -n '1,8p'
   echo
 
   echo "== Disk / Pressure Signals =="
