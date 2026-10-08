@@ -22,6 +22,11 @@ def snapshot():
     for line in Path('/proc/meminfo').read_text().splitlines():
         key, value, *_ = line.split()
         memory[key.rstrip(':')] = int(value)
+    softirqs = {}
+    for line in Path('/proc/softirqs').read_text().splitlines()[1:]:
+        fields = line.split()
+        if fields and fields[0].rstrip(':') in ('NET_RX', 'NET_TX'):
+            softirqs[fields[0].rstrip(':')] = sum(map(int, fields[1:]))
     disks = {}
     for line in Path('/proc/diskstats').read_text().splitlines():
         fields = line.split()
@@ -42,7 +47,7 @@ def snapshot():
             processes[entry.name] = (command, ticks)
         except (OSError, ValueError, IndexError):
             continue
-    return time.time(), cpu, memory, disks, processes
+    return time.time(), cpu, memory, disks, processes, softirqs
 
 
 if sys.argv[1] == 'collect':
@@ -50,8 +55,8 @@ if sys.argv[1] == 'collect':
     while True:
         time.sleep(1)
         current = snapshot()
-        start, old_cpu, _, old_disks, old_processes = previous
-        end, cpu, memory, disks, processes = current
+        start, old_cpu, _, old_disks, old_processes, old_softirqs = previous
+        end, cpu, memory, disks, processes, softirqs = current
         delta = [b - a for a, b in zip(old_cpu['cpu'], cpu['cpu'])]
         total = sum(delta)
         if total <= 0:
@@ -81,10 +86,16 @@ if sys.argv[1] == 'collect':
         process_cpu.sort(key=lambda item: item['cpu_pct_one_core'], reverse=True)
         record = {'start': start, 'end': end,
                   'cpu_busy_pct': 100 * busy_ticks / available_ticks if available_ticks > 0 else 0,
+                  'cpu_user_pct': 100 * (delta[0] + delta[1]) / total,
+                  'cpu_system_pct': 100 * delta[2] / total,
+                  'cpu_irq_pct': 100 * delta[5] / total,
+                  'cpu_softirq_pct': 100 * delta[6] / total,
                   'cpu_per_core_pct': per_cpu,
                   'top_processes': process_cpu[:5],
                   'cpu_iowait_pct': 100 * delta[4] / total,
                   'cpu_steal_pct': 100 * delta[7] / total,
+                  'net_rx_softirqs_s': (softirqs.get('NET_RX', 0) - old_softirqs.get('NET_RX', 0)) / elapsed,
+                  'net_tx_softirqs_s': (softirqs.get('NET_TX', 0) - old_softirqs.get('NET_TX', 0)) / elapsed,
                   'memory_available_mib': memory['MemAvailable'] / 1024,
                   'disks': {}}
         for name, values in disks.items():
@@ -111,8 +122,12 @@ else:
         return sum(r[key] * (r['end'] - r['start']) for r in rows) / sum(r['end'] - r['start'] for r in rows)
     print(f'resource_summary: 負荷中（終了待ちを含む） {len(rows)}サンプル | '
           f'CPU使用 平均={avg("cpu_busy_pct"):.1f}% 最大={max(r["cpu_busy_pct"] for r in rows):.1f}% | '
+          f'内訳: user={avg("cpu_user_pct"):.1f}% system={avg("cpu_system_pct"):.1f}% '
+          f'irq={avg("cpu_irq_pct"):.1f}% softirq={avg("cpu_softirq_pct"):.1f}% | '
           f'I/O待ち平均={avg("cpu_iowait_pct"):.1f}% 仮想CPU待ち平均={avg("cpu_steal_pct"):.1f}% | '
           f'メモリ利用可能 平均={avg("memory_available_mib"):.0f} MiB 最小={min(r["memory_available_mib"] for r in rows):.0f} MiB')
+    print(f'resource_summary: ネットワークsoftirq NET_RX平均={avg("net_rx_softirqs_s"):.0f}/秒 '
+          f'NET_TX平均={avg("net_tx_softirqs_s"):.0f}/秒')
     core_names = sorted(set.intersection(*(set(r['cpu_per_core_pct']) for r in rows)),
                         key=lambda name: int(name[3:]))
     if core_names:
