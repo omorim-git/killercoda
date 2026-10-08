@@ -13,10 +13,12 @@ print_snapshot() {
 
   now="$(date '+%Y-%m-%d %H:%M:%S %Z')"
   vmstat_line="$(vmstat 1 2 | tail -n 1 | tr -s ' ')"
-  mem_line="$(free -m | awk '/^Mem:/ {printf "used_mb=%s free_mb=%s available_mb=%s", $3, $4, $7}')"
+  mem_line="$(LC_ALL=C free -m | awk '/^Mem:/ {printf "メモリ: 使用=%s MiB / 利用可能=%s MiB / 合計=%s MiB", $3, $7, $2}')"
 
   echo "== Resource Snapshot @ ${now} =="
-  echo "summary: vmstat=${vmstat_line} | ${mem_line}"
+  printf 'summary: '
+  printf '%s\n' "$vmstat_line" | awk '{printf "CPU: アプリ=%s%% OS=%s%% 空き=%s%% I/O待ち=%s%% 仮想CPU待ち=%s%% | 実行待ち=%s / I/O待ちタスク=%s | ディスク: 読込=%s 書込=%s KiB/s | ", $13,$14,$15,$16,$17,$1,$2,$9,$10}'
+  echo "$mem_line"
   echo
 
   echo "== Kubernetes Node Metrics =="
@@ -36,7 +38,10 @@ print_snapshot() {
   echo
 
   echo "== Host CPU / Memory (controlplane) =="
-  printf '%s\n' "$vmstat_line"
+  echo "vmstat の列: r=実行待ち b=I/O待ち swpd=スワップ使用 free=空き buff=バッファ cache=キャッシュ"
+  echo "si/so=スワップ入出力 bi/bo=ディスク読書(KiB/s) in=割込み cs=切替(回/秒)"
+  echo "us=アプリ sy=OS id=空き wa=I/O待ち st=仮想CPU待ち(%)。末尾に追加列が出る場合があります。"
+  LC_ALL=C vmstat 1 2
   free -m
   echo
 
@@ -54,7 +59,7 @@ print_snapshot() {
     iostat -xz 1 2 | tail -n +1
   else
     echo "iostat unavailable; showing vmstat io columns only"
-    vmstat 1 2 | tail -n 1
+    LC_ALL=C vmstat 1 2
   fi
   echo
 }

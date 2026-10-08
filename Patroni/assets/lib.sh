@@ -110,7 +110,16 @@ extract_k6_stat() {
   local metric="$2"
   local key="$3"
 
-  sed -n "s/.*${metric}.*${key}=\\([^ ]*\\).*/\\1/p" "$file" | head -n 1
+  awk -v metric="$metric" -v key="$key" '
+    index($0, metric) && !found {
+      for (i = 1; i <= NF; i++) {
+        if (index($i, key "=") == 1) {
+          print substr($i, length(key) + 2)
+          found = 1
+          break
+        }
+      }
+    }' "$file"
 }
 
 extract_k6_failed_rate() {

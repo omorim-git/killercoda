@@ -1,7 +1,7 @@
 # 解答例と復旧
 
-今回の原因は、controlplane 側 host OS の `nftables` に API 向けの大量ルールが入っていたことです。  
-request ごとにその評価コストが乗るため、エラー率は高くないのに TAT と `dropped_iterations` が悪化していました。
+今回の原因は、API が動く controlplane の OS にある通信制御機能 `nftables` に、大量のルールが設定されていたことです。
+受信した通信データ（パケット）を順にルールと照合する処理が増えます。その影響を、応答時間や `dropped_iterations`（開始できなかった試験回数）の変化から確認します。
 
 確認方法:
 
@@ -34,6 +34,6 @@ sudo nft delete table inet kc_tat_lab
 
 `Check` は次を見ています。
 
-- `kc_tat_lab` table が消えている
+- ルールをまとめたテーブル `kc_tat_lab` が消えている
 - API がまだ応答している
-- `recovered` 実行結果の平均 TAT が `after-update` より改善している
+- `recovered` 実行結果の平均応答時間が `after-update` より改善している

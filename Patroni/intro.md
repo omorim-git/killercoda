@@ -4,16 +4,16 @@
 
 対象は `kubernetes-kubeadm-2nodes` 環境の次の構成です。
 
-- `controlplane`: SUT を置くノード
-- `node01`: `k6` runner を置くノード
-- `tat-api`: controlplane 上で `hostNetwork` で動く薄い HTTP API
-- `k6`: node01 上で Job として実行される負荷試験
+- `controlplane`: 調査対象の API が動くサーバー。Kubernetes の管理機能も動いています
+- `node01`: 負荷試験ツール k6 が動く別のサーバー
+- `tat-api`: リクエストに応答する簡単な HTTP API。controlplane のネットワークを直接利用します
+- `k6`: API に繰り返しリクエストを送り、応答時間や失敗率を測るツール
 
-準備が終わったら、まずトポロジと状態を確認してください。
+準備が終わったら、まずサーバー構成と稼働状態を確認してください。
 
 ```bash
 ~/kc-patroni-lab/topology.sh
 ~/kc-patroni-lab/cluster-status.sh
 ```
 
-次のステップでは正常時の TAT ベースラインを取得します。
+次のステップでは、比較の基準となる正常時の応答時間を記録します。

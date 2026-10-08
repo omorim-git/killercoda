@@ -30,7 +30,7 @@ for rate in "${rates[@]}"; do
   fi
 
   avg="$(extract_k6_stat "$logfile" 'http_req_duration' 'avg')"
-  p95="$(extract_k6_stat "$logfile" 'http_req_duration' 'p\(95\)')"
+  p95="$(extract_k6_stat "$logfile" 'http_req_duration' 'p(95)')"
   failed="$(extract_k6_failed_rate "$logfile")"
   dropped="$(extract_k6_dropped_iterations "$logfile")"
   reqs_rate="$(extract_k6_http_reqs_rate "$logfile")"
@@ -44,5 +44,5 @@ for rate in "${rates[@]}"; do
     "${failed:-0.00%}" \
     "${dropped:-0}" \
     "${reqs_rate:-n/a}"
-  printf '  %s\n' "$resource_overview"
+  printf '  測定終了後の状態（負荷中の平均ではありません）: %s\n' "${resource_overview#summary: }"
 done

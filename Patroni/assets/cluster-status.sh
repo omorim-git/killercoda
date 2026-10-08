@@ -7,7 +7,7 @@ echo "== Nodes =="
 kubectl get nodes -o wide
 echo
 
-echo "== SUT =="
+echo "== 調査対象のAPI =="
 echo "api url=$(api_url)"
 echo "api pod=$(api_pod_name 2>/dev/null || echo missing)"
 echo "api node=$(api_pod_node 2>/dev/null || echo unknown)"
@@ -18,7 +18,7 @@ else
 fi
 echo
 
-echo "== k6 Runner Placement =="
+echo "== 負荷試験ツールk6の実行先 =="
 echo "worker node=$(worker_node)"
 kubectl get jobs -n "$K8S_NAMESPACE" -o wide 2>/dev/null || true
 echo

@@ -9,7 +9,7 @@
 ~/kc-patroni-lab/benchmark.sh after-update 50
 ```
 
-`dropped_iterations` が出始めるレート差も観測してください。
+`dropped_iterations`（実行枠が足りず開始できなかった試験回数）が、どのリクエスト数から増えるかも比較してください。
 
 ```bash
 ~/kc-patroni-lab/rate-sweep.sh after-update-sweep 30 40 50 75 100
@@ -30,17 +30,19 @@
 - アプリケーション、OS、通信経路、負荷生成条件を候補にし、観測結果から優先順位を付ける
 - 一度に変更する項目を一つに絞り、変更前後の測定結果と反証も残す
 
-LLM に解析を手伝わせる場合は、まずログ bundle を採取します。
+生成AI（LLM）に調査を手伝わせる場合は、次のコマンドで調査用ログを1つのファイルにまとめます。
 
 ```bash
 ~/kc-patroni-lab/analysis-bundle.sh
 ls -1t ~/kc-patroni-lab/results/*analysis-bundle.txt | head -n 1
 ```
 
-LLM へのプロンプト例:
+作成されたファイルを `less ファイル名` で確認し、機密情報がないことを確認してから渡してください。
+
+生成AIに渡す依頼文の例:
 
 ```text
-以下は kubeadm 2nodes の性能劣化ラボのログです。
+以下は Kubernetes の2台のサーバーを使った演習環境のログです。
 利用者から API が遅いという問い合わせがありました。原因は未特定です。
 
 やってほしいこと:
@@ -50,7 +52,7 @@ LLM へのプロンプト例:
 4. 復旧案を出す場合は、影響範囲、元に戻す方法、改善の検証方法を示す
 
 ログ:
-<analysis-bundle の内容を貼る>
+<作成された調査用ログファイルの内容を貼る>
 ```
 
 演習準備のエラー表示が出た場合は、次の準備完了・失敗ファイルを確認してください。完了ファイルがなければ測定を始めず、講師に連絡してください。
@@ -59,4 +61,4 @@ LLM へのプロンプト例:
 ls -l /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 ```
 
-次の step では、原因の確認方法と復旧方法の解答例を示します。
+次のステップでは、原因の確認方法と復旧方法の解答例を示します。

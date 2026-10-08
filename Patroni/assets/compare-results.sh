@@ -12,7 +12,7 @@ summary() {
   local reqs_rate
 
   avg="$(extract_k6_stat "$file" 'http_req_duration' 'avg')"
-  p95="$(extract_k6_stat "$file" 'http_req_duration' 'p\(95\)')"
+  p95="$(extract_k6_stat "$file" 'http_req_duration' 'p(95)')"
   failed="$(extract_k6_failed_rate "$file")"
   dropped="$(extract_k6_dropped_iterations "$file")"
   reqs_rate="$(extract_k6_http_reqs_rate "$file")"

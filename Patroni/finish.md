@@ -1,13 +1,13 @@
 # まとめ
 
-今回の劣化要因は、SUT node の `nftables` に API 向けの大量 rule を入れ、すべての request packet がその評価を受けるようになったことです。
+今回の原因は、API が動くサーバーの `nftables` に大量の通信制御ルールが設定され、API 宛ての通信データを照合する処理が増えたことです。
 
 観測できたはずの兆候:
 
-- `k6` runner 自体は別ノードにいる
+- 負荷試験ツール `k6` は別のサーバーで動いている
 - API は動作継続している
 - `http_req_failed` は低いまま
 - それでも `http_req_duration` が大きく悪化する
-- `nft list table inet kc_tat_lab` で専用 chain に大量 rule が見える
+- `nft list table inet kc_tat_lab` で大量の通信制御ルールを確認できる
 
-実運用では、アプリ内部だけでなく host firewall や packet filtering policy 変更も TAT 劣化要因になります。負荷生成を別ノードに分けると、SUT 側の問題に寄せて観測しやすくなります。
+実運用では、アプリの処理に加えて OS の通信制御設定も応答時間に影響します。負荷試験ツールを別のサーバーに置くと、試験ツール自身による CPU やメモリの消費と、調査対象の状態を分けて確認しやすくなります。
