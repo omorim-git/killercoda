@@ -11,7 +11,7 @@ timestamp="$(date +%Y%m%d-%H%M%S)"
 outfile="${results_dir}/${timestamp}-analysis-bundle.txt"
 
 latest_logs() {
-  ls -1t "${results_dir}"/*.log 2>/dev/null | head -n 6
+  find "$results_dir" -maxdepth 1 -name '*.log' ! -name '*.resources.log' -type f | sort
 }
 
 {
@@ -23,7 +23,7 @@ latest_logs() {
   "${SCRIPT_DIR}/compare-results.sh" || true
   echo
 
-  echo "== resource-status =="
+  echo "== 現在の状態（負荷中の値ではありません） =="
   "${SCRIPT_DIR}/resource-status.sh" 1 5 || true
   echo
 
@@ -51,6 +51,13 @@ latest_logs() {
   for file in $(latest_logs); do
     echo "--- ${file} ---"
     cat "$file" || true
+    samples="${file%.log}.resources.jsonl"
+    if [[ -f "$samples" ]]; then
+      echo "--- 時刻付きリソース記録: $samples ---"
+      cat "$samples"
+      echo "--- 採取エラー（空ならエラーなし） ---"
+      cat "${samples}.errors" 2>/dev/null || true
+    fi
     echo
   done
 } | tee "$outfile"

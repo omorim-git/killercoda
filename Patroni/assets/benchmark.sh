@@ -20,6 +20,8 @@ script_file="$(mktemp)"
 job_file="$(mktemp)"
 wait_timeout="$((duration + 180))"
 keep_artifacts=0
+resource_pid=""
+resource_file="${outfile%.log}.resources.jsonl"
 
 job_pod_name() {
   kubectl get pods -n "$K8S_NAMESPACE" -l job-name="$job_name" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
@@ -65,6 +67,11 @@ print_job_debug() {
 cleanup() {
   local exit_code="${1:-0}"
 
+  if [[ -n "$resource_pid" ]]; then
+    kill "$resource_pid" 2>/dev/null || true
+    wait "$resource_pid" 2>/dev/null || true
+  fi
+
   rm -f "$script_file" "$job_file"
 
   if (( keep_artifacts == 1 || exit_code != 0 )); then
@@ -103,6 +110,9 @@ export const options = {
     },
   },
 };
+
+export function setup() { console.log('RESOURCE_START=' + Date.now()); }
+export function teardown() { console.log('RESOURCE_END=' + Date.now()); }
 
 export default function () {
   const response = http.get('http://$(controlplane_ip):${API_PORT}${API_TXN_PATH}', {
@@ -150,6 +160,8 @@ spec:
             name: ${job_name}-script
 EOF
 
+python3 "${BASH_SOURCE%/*}/collect-resources.py" collect >"$resource_file" 2>"${resource_file}.errors" &
+resource_pid=$!
 kubectl apply -f "$job_file" >/dev/null
 
 {
@@ -195,6 +207,12 @@ kubectl apply -f "$job_file" >/dev/null
   done
 
   kubectl logs -n "$K8S_NAMESPACE" "job/${job_name}"
-} | tee "$outfile"
+} 2>&1 | tee "$outfile"
+
+kill "$resource_pid" 2>/dev/null || true
+wait "$resource_pid" 2>/dev/null || true
+resource_pid=""
+python3 "${BASH_SOURCE%/*}/collect-resources.py" summary "$outfile" "$resource_file" | tee -a "$outfile"
+echo "Resource samples: $resource_file"
 
 echo "Saved: $outfile"

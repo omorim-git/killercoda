@@ -34,7 +34,7 @@ for rate in "${rates[@]}"; do
   failed="$(extract_k6_failed_rate "$logfile")"
   dropped="$(extract_k6_dropped_iterations "$logfile")"
   reqs_rate="$(extract_k6_http_reqs_rate "$logfile")"
-  resource_overview="$("${BASH_SOURCE%/*}/resource-status.sh" 1 5 | awk '/^summary:/ && !seen {print; seen=1}')"
+  resource_overview="$(awk '/^resource_summary:/' "$logfile")"
 
   printf '%-14s %-8s %-12s %-12s %-12s %-10s %-12s\n' \
     "$run_label" \
@@ -44,5 +44,6 @@ for rate in "${rates[@]}"; do
     "${failed:-0.00%}" \
     "${dropped:-0}" \
     "${reqs_rate:-n/a}"
-  printf '  測定終了後の状態（負荷中の平均ではありません）: %s\n' "${resource_overview#summary: }"
+  printf '%s\n' "$resource_overview"
+  printf '  保存先: %s\n' "$logfile"
 done
