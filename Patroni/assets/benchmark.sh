@@ -21,6 +21,7 @@ job_file="$(mktemp)"
 wait_timeout="$((duration + 180))"
 keep_artifacts=0
 resource_pid=""
+benchmark_status=0
 resource_file="${outfile%.log}.resources.jsonl"
 
 job_pod_name() {
@@ -207,12 +208,15 @@ kubectl apply -f "$job_file" >/dev/null
   done
 
   kubectl logs -n "$K8S_NAMESPACE" "job/${job_name}"
-} 2>&1 | tee "$outfile"
+} 2>&1 | tee "$outfile" || benchmark_status=$?
 
-kill "$resource_pid" 2>/dev/null || true
-wait "$resource_pid" 2>/dev/null || true
-resource_pid=""
+if [[ -n "$resource_pid" ]]; then
+  kill "$resource_pid" 2>/dev/null || true
+  wait "$resource_pid" 2>/dev/null || true
+  resource_pid=""
+fi
 python3 "${BASH_SOURCE%/*}/collect-resources.py" summary "$outfile" "$resource_file" | tee -a "$outfile"
 echo "Resource samples: $resource_file"
 
 echo "Saved: $outfile"
+exit "$benchmark_status"

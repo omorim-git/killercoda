@@ -128,6 +128,31 @@ else:
           f'メモリ利用可能 平均={avg("memory_available_mib"):.0f} MiB 最小={min(r["memory_available_mib"] for r in rows):.0f} MiB')
     print(f'resource_summary: ネットワークsoftirq NET_RX平均={avg("net_rx_softirqs_s"):.0f}/秒 '
           f'NET_TX平均={avg("net_tx_softirqs_s"):.0f}/秒')
+    print('resource_graph: CPU使用率の推移（各列は約1秒、縦軸は%）')
+    graph_series = [
+        ('CPU全体', 'cpu_busy_pct', '*'),
+        ('system', 'cpu_system_pct', 'S'),
+        ('softirq', 'cpu_softirq_pct', 'N'),
+    ]
+    for level in range(100, -1, -10):
+        marks = []
+        for index, row in enumerate(rows):
+            cell = ' '
+            for _, key, marker in graph_series:
+                value = row[key]
+                if level - 5 <= value < level + 5 or (level == 100 and value >= 95):
+                    cell = marker if cell == ' ' else 'X'
+            marks.append(cell)
+        print(f'resource_graph: {level:3d} |{"".join(marks)}')
+    print('resource_graph:     +' + '-' * len(rows))
+    tick_labels = [' ' for _ in rows]
+    for index in range(0, len(rows), 5):
+        label = str(index)
+        for offset, char in enumerate(label):
+            if index + offset < len(tick_labels):
+                tick_labels[index + offset] = char
+    print('resource_graph:      ' + ''.join(tick_labels) + ' sample')
+    print('resource_graph: 凡例: *=CPU全体 S=system N=softirq X=複数系列')
     core_names = sorted(set.intersection(*(set(r['cpu_per_core_pct']) for r in rows)),
                         key=lambda name: int(name[3:]))
     if core_names:

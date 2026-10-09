@@ -16,7 +16,22 @@
 ~/kc-patroni-lab/compare-results.sh
 ```
 
-負荷中のリソースは自動で採取・保存されます。各測定の CPU、メモリ、ディスク読書量の集計も正常時と比較してください。採取対象は controlplane 全体です。負荷生成側 node01 の状況は必要に応じて追加調査してください。
+rate-sweep の最後の列 `job_status` は、k6の終了状態です。`k6-failed`でも測定結果のログがあれば、そのrateの記録を表示して次のrateへ進みます。HTTPエラーが増えた場合は、応答時間や実行できなかった回数だけでなく、APIが再起動していないかも確認してください。
+
+```bash
+kubectl get pods -n tat-lab -l app=tat-api -o wide
+kubectl describe pod -n tat-lab -l app=tat-api
+kubectl logs -n tat-lab deploy/tat-api --previous
+kubectl get events -n tat-lab --sort-by=.lastTimestamp | tail -n 40
+```
+
+`--previous`でログが取れない場合、コンテナが再起動していない可能性があります。Podの`Restart Count`、終了理由、イベントも合わせて確認します。調査用ログには次のコマンドでこれらの情報も含められます。
+
+```bash
+~/kc-patroni-lab/analysis-bundle.sh
+```
+
+負荷中のリソースは自動で採取・保存されます。各測定の CPU、メモリ、ディスク読書量の集計も正常時と比較してください。rate-sweepには、負荷中のCPU全体・system・softirqの時系列グラフも表示されます。`*`がCPU全体、`S`がsystem、`N`がsoftirqです。採取対象はcontrolplane全体です。負荷生成側node01の状況は必要に応じて追加調査してください。
 
 解析のヒント:
 
