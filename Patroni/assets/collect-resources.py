@@ -10,6 +10,50 @@ from pathlib import Path
 CPU_TICKS_PER_SECOND = os.sysconf('SC_CLK_TCK')
 
 
+def write_cpu_svg(rows, path):
+    width, height = 960, 440
+    left, right, top, bottom = 72, 24, 54, 58
+    plot_width, plot_height = width - left - right, height - top - bottom
+    count = len(rows)
+    x = lambda index: left + (plot_width / max(count - 1, 1)) * index
+    y = lambda value: top + plot_height * (1 - max(0, min(100, value)) / 100)
+    colors = {'cpu_busy_pct': '#1769aa', 'cpu_system_pct': '#d97706', 'cpu_softirq_pct': '#16804a'}
+    labels = {'cpu_busy_pct': 'CPU total', 'cpu_system_pct': 'System', 'cpu_softirq_pct': 'Softirq'}
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#fff"/>',
+        '<style>text{font-family:Arial,sans-serif;fill:#263238}.grid{stroke:#d9e0e5;stroke-width:1}.axis{stroke:#59666f;stroke-width:1.5}</style>',
+        '<text x="72" y="28" font-size="19" font-weight="bold">CPU utilization during load</text>',
+        '<text x="72" y="46" font-size="12" fill="#59666f">Control-plane host, approximately one sample per second</text>',
+    ]
+    for level in range(0, 101, 20):
+        yy = y(level)
+        parts.append(f'<line class="grid" x1="{left}" y1="{yy:.1f}" x2="{width-right}" y2="{yy:.1f}"/>')
+        parts.append(f'<text x="{left-12}" y="{yy+4:.1f}" font-size="12" text-anchor="end">{level}%</text>')
+    parts.extend([
+        f'<line class="axis" x1="{left}" y1="{top}" x2="{left}" y2="{height-bottom}"/>',
+        f'<line class="axis" x1="{left}" y1="{height-bottom}" x2="{width-right}" y2="{height-bottom}"/>',
+        f'<text x="{left + plot_width/2:.1f}" y="{height-14}" font-size="13" text-anchor="middle">Elapsed time (seconds)</text>',
+    ])
+    for index in range(0, count, max(1, count // 5)):
+        xx = x(index)
+        elapsed = rows[index]['start'] - rows[0]['start']
+        parts.append(f'<text x="{xx:.1f}" y="{height-bottom+20}" font-size="11" text-anchor="middle">{elapsed:.0f}</text>')
+    if count > 1 and (count - 1) % max(1, count // 5):
+        xx = x(count - 1)
+        elapsed = rows[-1]['start'] - rows[0]['start']
+        parts.append(f'<text x="{xx:.1f}" y="{height-bottom+20}" font-size="11" text-anchor="middle">{elapsed:.0f}</text>')
+    for offset, key in enumerate(colors):
+        points = ' '.join(f'{x(i):.1f},{y(row[key]):.1f}' for i, row in enumerate(rows))
+        parts.append(f'<polyline fill="none" stroke="{colors[key]}" stroke-width="2.5" points="{points}"/>')
+        legend_x = left + offset * 150
+        parts.append(f'<line x1="{legend_x}" y1="{height-32}" x2="{legend_x+24}" y2="{height-32}" stroke="{colors[key]}" stroke-width="3"/>')
+        parts.append(f'<text x="{legend_x+31}" y="{height-28}" font-size="12">{labels[key]}</text>')
+    parts.append('</svg>')
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text('\n'.join(parts), encoding='utf-8')
+
+
 def snapshot():
     cpu = {}
     for line in Path('/proc/stat').read_text().splitlines():
@@ -128,31 +172,13 @@ else:
           f'メモリ利用可能 平均={avg("memory_available_mib"):.0f} MiB 最小={min(r["memory_available_mib"] for r in rows):.0f} MiB')
     print(f'resource_summary: ネットワークsoftirq NET_RX平均={avg("net_rx_softirqs_s"):.0f}/秒 '
           f'NET_TX平均={avg("net_tx_softirqs_s"):.0f}/秒')
-    print('resource_graph: CPU使用率の推移（各列は約1秒、縦軸は%）')
-    graph_series = [
-        ('CPU全体', 'cpu_busy_pct', '*'),
-        ('system', 'cpu_system_pct', 'S'),
-        ('softirq', 'cpu_softirq_pct', 'N'),
-    ]
-    for level in range(100, -1, -10):
-        marks = []
-        for index, row in enumerate(rows):
-            cell = ' '
-            for _, key, marker in graph_series:
-                value = row[key]
-                if level - 5 <= value < level + 5 or (level == 100 and value >= 95):
-                    cell = marker if cell == ' ' else 'X'
-            marks.append(cell)
-        print(f'resource_graph: {level:3d} |{"".join(marks)}')
-    print('resource_graph:     +' + '-' * len(rows))
-    tick_labels = [' ' for _ in rows]
-    for index in range(0, len(rows), 5):
-        label = str(index)
-        for offset, char in enumerate(label):
-            if index + offset < len(tick_labels):
-                tick_labels[index + offset] = char
-    print('resource_graph:      ' + ''.join(tick_labels) + ' sample')
-    print('resource_graph: 凡例: *=CPU全体 S=system N=softirq X=複数系列')
+    if len(sys.argv) > 4:
+        write_cpu_svg(rows, sys.argv[4])
+        if len(sys.argv) > 5:
+            latest = Path(sys.argv[5])
+            latest.parent.mkdir(parents=True, exist_ok=True)
+            latest.write_text(Path(sys.argv[4]).read_text(encoding='utf-8'), encoding='utf-8')
+        print(f'resource_graph_image: {sys.argv[4]}')
     core_names = sorted(set.intersection(*(set(r['cpu_per_core_pct']) for r in rows)),
                         key=lambda name: int(name[3:]))
     if core_names:

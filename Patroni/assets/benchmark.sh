@@ -23,6 +23,14 @@ keep_artifacts=0
 resource_pid=""
 benchmark_status=0
 resource_file="${outfile%.log}.resources.jsonl"
+graph_file="${outfile%.log}-cpu.svg"
+graph_latest="${LAB_RUNTIME_DIR}/graphs/latest.svg"
+
+mkdir -p "$(dirname "$graph_latest")"
+if ! curl -fsS --max-time 1 http://127.0.0.1:8090/latest.svg >/dev/null 2>&1; then
+  nohup python3 -m http.server 8090 --bind 0.0.0.0 --directory "$(dirname "$graph_latest")" \
+    >/tmp/kc-patroni-graph-http.log 2>&1 </dev/null &
+fi
 
 job_pod_name() {
   kubectl get pods -n "$K8S_NAMESPACE" -l job-name="$job_name" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true
@@ -215,7 +223,7 @@ if [[ -n "$resource_pid" ]]; then
   wait "$resource_pid" 2>/dev/null || true
   resource_pid=""
 fi
-python3 "${BASH_SOURCE%/*}/collect-resources.py" summary "$outfile" "$resource_file" | tee -a "$outfile"
+python3 "${BASH_SOURCE%/*}/collect-resources.py" summary "$outfile" "$resource_file" "$graph_file" "$graph_latest" | tee -a "$outfile"
 echo "Resource samples: $resource_file"
 
 echo "Saved: $outfile"

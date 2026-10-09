@@ -47,4 +47,8 @@ ls -1 ~/kc-patroni-lab/results
 
 `results/` に測定結果 `.log` と、同じ名前の時刻付き元データ `.resources.jsonl` を保存します。開始・終了時刻は測定ログの `RESOURCE_START` / `RESOURCE_END` に記録します。準備中のサンプルも元データには残りますが、平均には含めません。
 
+CPU全体・system・softirqの時系列はSVG画像にも保存し、このリンクから表示できます。測定後にページを再読み込みすると最新のグラフに更新されます。
+
+[CPU使用率グラフを開く]({{TRAFFIC_HOST1_8090}}/latest.svg)
+
 CPU、メモリ、ディスク I/O の正常時の値を記録してください。後の調査では、同じ負荷条件で取得した値と比較します。

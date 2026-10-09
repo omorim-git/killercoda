@@ -38,7 +38,7 @@ for rate in "${rates[@]}"; do
   dropped="$(extract_k6_dropped_iterations "$logfile")"
   reqs_rate="$(extract_k6_http_reqs_rate "$logfile")"
   resource_overview="$(awk '/^resource_summary:/' "$logfile")"
-  resource_graph="$(awk '/^resource_graph:/' "$logfile")"
+  resource_graph="$(sed -n 's/^resource_graph_image: /CPUグラフ画像: /p' "$logfile")"
 
   printf '%-14s %-8s %-12s %-12s %-12s %-10s %-12s %-12s\n' \
     "$run_label" \
@@ -50,8 +50,6 @@ for rate in "${rates[@]}"; do
     "${reqs_rate:-n/a}" \
     "$job_status"
   printf '%s\n' "$resource_overview"
-  if [[ -n "$resource_graph" ]]; then
-    printf '%s\n' "$resource_graph"
-  fi
+  [[ -z "$resource_graph" ]] || printf '%s\n' "$resource_graph"
   printf '  保存先: %s\n' "$logfile"
 done
