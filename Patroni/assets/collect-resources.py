@@ -2,6 +2,7 @@
 """Record host counters once per second; summarize only the k6 time window."""
 import json
 import re
+import shutil
 import sys
 import time
 import os
@@ -177,8 +178,11 @@ else:
         if len(sys.argv) > 5:
             latest = Path(sys.argv[5])
             latest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(sys.argv[4], latest.parent / Path(sys.argv[4]).name)
             latest.write_text(Path(sys.argv[4]).read_text(encoding='utf-8'), encoding='utf-8')
         print(f'resource_graph_image: {sys.argv[4]}')
+        if len(sys.argv) > 5:
+            print(f'resource_graph_archive: {latest.parent / Path(sys.argv[4]).name}')
     core_names = sorted(set.intersection(*(set(r['cpu_per_core_pct']) for r in rows)),
                         key=lambda name: int(name[3:]))
     if core_names:

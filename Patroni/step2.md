@@ -31,9 +31,9 @@ kubectl get events -n tat-lab --sort-by=.lastTimestamp | tail -n 40
 ~/kc-patroni-lab/analysis-bundle.sh
 ```
 
-負荷中のリソースは自動で採取・保存されます。各測定の CPU、メモリ、ディスク読書量の集計も正常時と比較してください。CPU全体・system・softirqの時系列はSVG画像に保存されます。下のリンクは最新測定の画像を表示します。測定後にページを再読み込みして比較してください。各測定固有の画像は`~/kc-patroni-lab/results/`内の`*-cpu.svg`です。採取対象はcontrolplane全体です。負荷生成側node01の状況は必要に応じて追加調査してください。
+負荷中のリソースは自動で採取・保存されます。各測定の CPU、メモリ、ディスク読書量の集計も正常時と比較してください。CPU全体・system・softirqの時系列は測定ごとにSVG画像へ保存されます。下のリンクから画像一覧を開き、測定名とrateを見て比較したい画像を選んでください。元画像は`~/kc-patroni-lab/results/`内の`*-cpu.svg`にも保存されています。採取対象はcontrolplane全体です。負荷生成側node01の状況は必要に応じて追加調査してください。
 
-[CPU使用率グラフを開く]({{TRAFFIC_HOST1_8090}}/latest.svg)
+[CPU使用率グラフ画像の一覧を開く]({{TRAFFIC_HOST1_8090}}/)
 
 解析のヒント:
 
