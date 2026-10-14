@@ -55,7 +55,7 @@ wait_for_deployment() {
     fi
     pods="$(kubectl get pods -n "$K8S_NAMESPACE" -l "$selector" \
       -o custom-columns='NAME:.metadata.name,READY:.status.containerStatuses[0].ready,PHASE:.status.phase,REASON:.status.containerStatuses[0].state.waiting.reason' --no-headers 2>/dev/null | tr '\n' ';' || true)"
-    log "Waiting for ${name}: ${now-start}s elapsed; ready=${ready:-0}/${expected}; ${pods:-pod not created yet}"
+    log "Waiting for ${name}: $((now - start))s elapsed; ready=${ready:-0}/${expected}; ${pods:-pod not created yet}"
     sleep 10
   done
 }
@@ -70,9 +70,11 @@ cleanup_previous() {
 }
 
 apply_database_manifests() {
-  local cp_node worker
+  local cp_node worker cp_ip worker_ip
   cp_node="$(controlplane_node)"
   worker="$(worker_node)"
+  cp_ip="$(node_internal_ip "$cp_node")"
+  worker_ip="$(node_internal_ip "$worker")"
 
   cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -110,39 +112,23 @@ roleRef:
   kind: Role
   name: patroni-dcs
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: ${DB_CLUSTER}-config
-  namespace: ${K8S_NAMESPACE}
-  labels:
-    application: ${DB_APP_LABEL}
-    cluster-name: ${DB_CLUSTER}
-spec:
-  clusterIP: None
-  publishNotReadyAddresses: true
----
-# Patroni Kubernetes DCS keeps the leader endpoint; it replaces standalone etcd here.
+# Patroni stores cluster state in ConfigMaps; this Service routes clients to the Primary Pod.
 apiVersion: v1
 kind: Service
 metadata:
   name: ${DB_CLUSTER}
   namespace: ${K8S_NAMESPACE}
+  labels:
+    application: ${DB_APP_LABEL}
+    cluster-name: ${DB_CLUSTER}
 spec:
+  selector:
+    cluster-name: ${DB_CLUSTER}
+    ${DB_ROLE_LABEL}: ${DB_PRIMARY_LABEL}
   ports:
     - name: postgresql
       port: ${DB_PORT}
       targetPort: ${DB_PORT}
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: ${DB_CLUSTER}
-  namespace: ${K8S_NAMESPACE}
-  labels:
-    application: ${DB_APP_LABEL}
-    cluster-name: ${DB_CLUSTER}
-subsets: []
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -246,8 +232,7 @@ spec:
             - {name: SCOPE, value: "${DB_CLUSTER}"}
             - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
             - {name: DCS_ENABLE_KUBERNETES_API, value: "true"}
-            - {name: PATRONI_KUBERNETES_USE_ENDPOINTS, value: "true"}
-            - {name: PATRONI_KUBERNETES_PORTS, value: '[{"name":"postgresql","port":5432}]'}
+            - {name: KUBERNETES_USE_CONFIGMAPS, value: "true"}
             - {name: PATRONI_KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
             - {name: PATRONI_KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
             - {name: PATRONI_KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
@@ -262,9 +247,9 @@ spec:
             - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
-            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "\$(POD_IP):5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${cp_ip}:5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
-            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "\$(POD_IP):8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "${cp_ip}:8008"}
             - {name: PATRONI_REPLICATION_USERNAME, value: standby}
             - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
             - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
@@ -321,8 +306,7 @@ spec:
             - {name: SCOPE, value: "${DB_CLUSTER}"}
             - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
             - {name: DCS_ENABLE_KUBERNETES_API, value: "true"}
-            - {name: PATRONI_KUBERNETES_USE_ENDPOINTS, value: "true"}
-            - {name: PATRONI_KUBERNETES_PORTS, value: '[{"name":"postgresql","port":5432}]'}
+            - {name: KUBERNETES_USE_CONFIGMAPS, value: "true"}
             - {name: PATRONI_KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
             - {name: PATRONI_KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
             - {name: PATRONI_KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
@@ -337,9 +321,9 @@ spec:
             - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
-            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "\$(POD_IP):5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${worker_ip}:5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
-            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "\$(POD_IP):8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "${worker_ip}:8008"}
             - {name: PATRONI_REPLICATION_USERNAME, value: standby}
             - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
             - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
