@@ -2,11 +2,20 @@
 set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
+if [[ -z "${DB_SERVICE:-}" ]] || ! declare -F db_primary_pod_name >/dev/null; then
+  echo "Scenario files are from different versions: lib.sh lacks the DB cluster settings/functions."
+  echo "Recopy all files from the scenario assets directory, then reopen the Killercoda session."
+  exit 2
+fi
+
 echo "== Kubernetes nodes =="
 kubectl get nodes -o wide
 echo
 echo "== API and database pods =="
 kctl get pods -o wide
+if ! kctl get pods -o name | grep -Eq 'db-primary|db-standby|tat-api'; then
+  echo "No database/API pods exist. Check /tmp/kc-patroni-lab-bootstrap.log and the bootstrap failed marker."
+fi
 echo
 echo "== Service endpoint for the current database primary =="
 kctl get endpoints "$DB_SERVICE" -o wide 2>/dev/null || true

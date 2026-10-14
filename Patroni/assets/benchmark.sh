@@ -20,6 +20,8 @@ script_file="$(mktemp)"
 job_file="$(mktemp)"
 wait_timeout="$((duration + 180))"
 keep_artifacts=0
+artifacts_created=0
+job_created=0
 resource_pid=""
 benchmark_status=0
 resource_file="${outfile%.log}.resources.jsonl"
@@ -79,13 +81,17 @@ cleanup() {
 
   rm -f "$script_file" "$job_file"
 
-  if (( keep_artifacts == 1 || exit_code != 0 )); then
+  if (( keep_artifacts == 1 && job_created == 1 )); then
     echo "[benchmark] preserving job artifacts for debugging: job/${job_name}" >&2
     return 0
   fi
 
-  kubectl delete configmap "${job_name}-script" -n "$K8S_NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
-  kubectl delete job "$job_name" -n "$K8S_NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  if (( artifacts_created == 1 )); then
+    kubectl delete configmap "${job_name}-script" -n "$K8S_NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  fi
+  if (( job_created == 1 )); then
+    kubectl delete job "$job_name" -n "$K8S_NAMESPACE" --ignore-not-found >/dev/null 2>&1 || true
+  fi
 }
 
 trap 'cleanup $?' EXIT
@@ -137,6 +143,7 @@ export default function () {
 EOF
 
 kubectl create configmap "${job_name}-script" -n "$K8S_NAMESPACE" --from-file=script.js="$script_file" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+artifacts_created=1
 
 cat >"$job_file" <<EOF
 apiVersion: batch/v1
@@ -168,6 +175,7 @@ EOF
 python3 "${BASH_SOURCE%/*}/collect-resources.py" collect >"$resource_file" 2>"${resource_file}.errors" &
 resource_pid=$!
 kubectl apply -f "$job_file" >/dev/null
+job_created=1
 
 {
   echo "[benchmark] label=${label} duration=${duration}s rate=${rate}/s preAllocatedVUs=${pre_allocated_vus} maxVUs=${max_vus}"

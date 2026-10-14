@@ -3,6 +3,12 @@ set -euo pipefail
 
 source "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 
+if ! declare -F find_latest_result >/dev/null || ! declare -F extract_k6_stat >/dev/null; then
+  echo "Scenario files are from different versions: lib.sh is missing result helper functions." >&2
+  echo "Recopy all files from the scenario assets directory, then reopen the Killercoda session." >&2
+  exit 2
+fi
+
 label_prefix="${1:-sweep}"
 shift || true
 

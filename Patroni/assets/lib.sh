@@ -14,10 +14,23 @@ API_PORT="8080"
 API_HEALTH_PATH="/healthz"
 API_TXN_PATH="/txn"
 K6_JOB_PREFIX="tat-k6"
+DB_CLUSTER="kc-sync-lab"
+DB_APP_LABEL="spilo"
+DB_ROLE_LABEL="spilo-role"
+DB_PRIMARY_LABEL="master"
+DB_STANDBY_LABEL="replica"
+DB_SERVICE="$DB_CLUSTER"
+DB_PORT="5432"
+DB_NAME="postgres"
+DB_APP_USER="tatapp"
+DB_APP_PASSWORD="tatapp-lab-password"
+DB_SUPERUSER_PASSWORD="postgres-lab-password"
+DB_REPLICATION_PASSWORD="replication-lab-password"
+DB_IMAGE="ghcr.io/zalando/spilo-17:4.0-p2"
 
 NFT_TABLE="kc_tat_lab"
 NFT_INPUT_CHAIN="input"
-NFT_GUARD_CHAIN="api_guard"
+NFT_GUARD_CHAIN="replication_guard"
 NFT_RULE_COUNT=50000
 UPDATE_MARKER="${LAB_RUNTIME_DIR}/update-applied"
 
@@ -82,6 +95,26 @@ api_pod_node() {
   kctl get pod -l app="$API_APP_LABEL" -o jsonpath='{.items[0].spec.nodeName}'
 }
 
+db_primary_pod_name() {
+  kctl get pod -l "cluster-name=${DB_CLUSTER},${DB_ROLE_LABEL}=${DB_PRIMARY_LABEL}" -o jsonpath='{.items[0].metadata.name}'
+}
+
+db_standby_pod_name() {
+  kctl get pod -l "cluster-name=${DB_CLUSTER},${DB_ROLE_LABEL}=${DB_STANDBY_LABEL}" -o jsonpath='{.items[0].metadata.name}'
+}
+
+db_pod_node() {
+  local pod="$1"
+  kctl get pod "$pod" -o jsonpath='{.spec.nodeName}'
+}
+
+db_standby_node() {
+  local pod
+  pod="$(db_standby_pod_name 2>/dev/null || true)"
+  [[ -n "$pod" ]] || return 1
+  db_pod_node "$pod"
+}
+
 api_healthy() {
   curl -fsS --max-time 3 "$(api_health_url)" >/dev/null
 }
@@ -110,16 +143,35 @@ ensure_artifact_server() {
 }
 
 nft_table_exists() {
-  run_root nft list table inet "$NFT_TABLE" >/dev/null 2>&1
+  local node
+  node="$(db_standby_node 2>/dev/null || true)"
+  [[ -n "$node" ]] || return 1
+  ssh -o BatchMode=yes -o ConnectTimeout=3 "$node" sudo nft list table inet "$NFT_TABLE" >/dev/null 2>&1
 }
 
 nft_rule_count() {
+  local node
+  node="$(db_standby_node 2>/dev/null || true)"
+  [[ -n "$node" ]] || { echo 0; return 0; }
   if ! nft_table_exists; then
     echo 0
     return 0
   fi
 
-  run_root nft list chain inet "$NFT_TABLE" "$NFT_GUARD_CHAIN" 2>/dev/null | awk '/ip saddr / {c++} END {print c+0}'
+  ssh -o BatchMode=yes -o ConnectTimeout=3 "$node" sudo nft list chain inet "$NFT_TABLE" "$NFT_GUARD_CHAIN" 2>/dev/null | awk '/ip saddr / {c++} END {print c+0}'
+}
+
+nft_delete_from_node() {
+  local node="$1"
+  ssh -o BatchMode=yes -o ConnectTimeout=3 "$node" sudo nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
+}
+
+nft_delete_from_all_nodes() {
+  local node
+  while IFS= read -r node; do
+    [[ -n "$node" ]] || continue
+    nft_delete_from_node "$node"
+  done < <(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
 }
 
 update_state() {
