@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
 RULESET_FILE="${LAB_RUNTIME_DIR}/nftables-bloat.nft"
+STANDBY_NODE="$(db_standby_node)"
 
 log() {
   echo "[update] $*"
@@ -50,8 +51,8 @@ log "Generating nftables rule explosion"
 {
   echo "table inet ${NFT_TABLE} {"
   echo "  chain ${NFT_INPUT_CHAIN} {"
-  echo "    type filter hook input priority 0; policy accept;"
-  echo "    tcp dport ${API_PORT} jump ${NFT_GUARD_CHAIN}"
+    echo "    type filter hook input priority 0; policy accept;"
+    echo "    tcp dport ${DB_PORT} jump ${NFT_GUARD_CHAIN}"
   echo "  }"
   echo "  chain ${NFT_GUARD_CHAIN} {"
   for i in $(seq 1 "$NFT_RULE_COUNT"); do
@@ -62,9 +63,9 @@ log "Generating nftables rule explosion"
   echo "}"
 } >"$RULESET_FILE"
 
-log "Applying nftables rules"
-run_root nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
-run_root nft -f "$RULESET_FILE"
+log "Applying nftables rules on standby node ${STANDBY_NODE} (PostgreSQL replication port ${DB_PORT})"
+ssh -o BatchMode=yes -o ConnectTimeout=5 "$STANDBY_NODE" sudo nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
+ssh -o BatchMode=yes -o ConnectTimeout=5 "$STANDBY_NODE" sudo nft -f - <"$RULESET_FILE"
 
 touch "$UPDATE_MARKER"
 log "Update state has been applied"

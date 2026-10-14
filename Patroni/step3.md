@@ -1,21 +1,22 @@
 # 解答例と復旧
 
-今回の原因は、API が動く controlplane の OS にある通信制御機能 `nftables` に、大量のルールが設定されていたことです。
-受信した通信データ（パケット）を順にルールと照合する処理が増えます。その影響を、応答時間や `dropped_iterations`（開始できなかった試験回数）の変化から確認します。
+今回の原因は、PostgreSQL Standby が動く `node01` の `nftables` に大量の照合ルールが設定され、PrimaryからStandbyへ送るレプリケーション通信の処理が重くなっていたことです。API自身の通信を直接制限しているわけではありません。
+
+APIは各リクエストでDBへ書き込み、同期COMMITが完了してから応答します。PrimaryはStandbyからWALの受信確認を得るまでCOMMITを完了できないため、DB間通信の遅れがAPIの応答時間に現れます。
 
 確認方法:
 
 ```bash
-sudo nft list table inet kc_tat_lab
-sudo nft list ruleset | less
-sudo nft list chain inet kc_tat_lab api_guard | head
-sudo nft list chain inet kc_tat_lab api_guard | grep -c 'ip saddr '
+STANDBY_NODE="$(kubectl get pod -n tat-lab -l cluster-name=kc-sync-lab,spilo-role=replica -o jsonpath='{.items[0].spec.nodeName}')"
+ssh "$STANDBY_NODE" sudo nft list table inet kc_tat_lab
+ssh "$STANDBY_NODE" sudo nft list chain inet kc_tat_lab replication_guard | head
+ssh "$STANDBY_NODE" sudo nft list chain inet kc_tat_lab replication_guard | grep -c 'ip saddr '
 ```
 
 復旧方法:
 
 ```bash
-sudo nft delete table inet kc_tat_lab
+ssh "$STANDBY_NODE" sudo nft delete table inet kc_tat_lab
 ```
 
 復旧確認:
@@ -37,3 +38,4 @@ sudo nft delete table inet kc_tat_lab
 - ルールをまとめたテーブル `kc_tat_lab` が消えている
 - API がまだ応答している
 - `recovered` 実行結果の平均応答時間が `after-update` より改善している
+- Patroniの状態表示でStandbyが同期状態に戻っている

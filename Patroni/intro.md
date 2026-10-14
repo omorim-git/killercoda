@@ -4,10 +4,13 @@
 
 対象は `kubernetes-kubeadm-2nodes` 環境の次の構成です。
 
-- `controlplane`: 調査対象の API が動くサーバー。Kubernetes の管理機能も動いています
-- `node01`: 負荷試験ツール k6 が動く別のサーバー
-- `tat-api`: リクエストに応答する簡単な HTTP API。controlplane のネットワークを直接利用します
+- `controlplane`: Web/API と PostgreSQL Primary が動くサーバー。Kubernetes の管理機能も動いています
+- `node01`: PostgreSQL Standby と負荷試験ツール k6 が動くサーバー
+- PostgreSQL は Patroni で管理し、Primary の更新を Standby に同期レプリケーションします
+- API はリクエストごとにDBへ書き込み、COMMIT完了後に応答します
 - `k6`: API に繰り返しリクエストを送り、応答時間や失敗率を測るツール
+
+2ノード環境の制約でStandbyとk6 runnerは同じ `node01` に載ります。CPU・メモリを完全には分離できない点も結果の評価に含めてください。
 
 準備が終わったら、まずサーバー構成と稼働状態を確認してください。
 

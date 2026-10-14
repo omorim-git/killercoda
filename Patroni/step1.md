@@ -1,6 +1,6 @@
 # 正常時の応答時間を記録する
 
-まずは正常時の API 応答時間を確認します。
+まずは正常時の API 応答時間とPrimary/Standby間の同期状態を確認します。APIはDBの書き込みと同期COMMITが完了してから応答します。
 
 ```bash
 ~/kc-patroni-lab/cluster-status.sh
@@ -9,8 +9,9 @@
 
 期待する観点:
 
-- `tat-api` が `controlplane` に載っている
-- `k6` は `node01` で実行される
+- APIとPostgreSQL Primaryが `controlplane`、Standbyが `node01` に載っている
+- PostgreSQLの同期レプリケーションが `sync` 状態である
+- `k6` は `node01` で実行される（Standbyと同じノード）
 - 既定では 20 秒間、指定した `rate` で負荷をかける
 - `http_req_duration` の `avg` / `p(95)` が基準値になる
 - `http_req_failed` は `0.00%` 近辺になる

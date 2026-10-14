@@ -7,60 +7,39 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
-
 export DEBIAN_FRONTEND=noninteractive
 
-log() {
-  echo "[install] $*"
-}
+log() { echo "[install] $*"; }
 
 dump_failure_context() {
-  echo "== kubectl get nodes -o wide ==" >&2
+  echo "== nodes / pods ==" >&2
   kubectl get nodes -o wide >&2 || true
-
-  echo "== kubectl get pods -A -o wide ==" >&2
-  kubectl get pods -A -o wide >&2 || true
-
-  if kubectl get namespace "$K8S_NAMESPACE" >/dev/null 2>&1; then
-    echo "== tat-api describe ==" >&2
-    kctl describe deployment "$API_DEPLOYMENT" >&2 || true
-    kctl describe pod -l app="$API_APP_LABEL" >&2 || true
-
-    echo "== tat-api logs ==" >&2
-    kctl logs deploy/"$API_DEPLOYMENT" >&2 || true
-  fi
-
-  echo "== nftables table ==" >&2
-  run_root nft list table inet "$NFT_TABLE" >&2 2>/dev/null || true
+  kubectl get pods -n "$K8S_NAMESPACE" -o wide >&2 || true
+  kubectl get endpoints -n "$K8S_NAMESPACE" >&2 || true
+  kubectl logs -n "$K8S_NAMESPACE" -l "cluster-name=${DB_CLUSTER}" --all-containers --tail=100 >&2 || true
+  kubectl logs -n "$K8S_NAMESPACE" deploy/"$API_DEPLOYMENT" --tail=100 >&2 || true
 }
-
 trap dump_failure_context ERR
 
 wait_for_nodes_ready() {
-  log "Waiting for Kubernetes nodes"
+  log "Waiting for the two Kubernetes nodes"
   kubectl wait --for=condition=Ready node --all --timeout=180s >/dev/null
-
-  if [[ -z "$(worker_node)" ]]; then
-    echo "worker node not found" >&2
-    exit 1
-  fi
+  [[ -n "$(worker_node)" ]] || { echo "worker node not found" >&2; exit 1; }
 }
 
 cleanup_previous() {
   log "Cleaning previous lab state"
-
   kubectl delete namespace "$K8S_NAMESPACE" --ignore-not-found --wait=true >/dev/null 2>&1 || true
-  run_root nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
-
+  nft_delete_from_all_nodes
   rm -rf "$LAB_RUNTIME_DIR"
   mkdir -p "$LAB_RUNTIME_DIR" "${LAB_HOME_DIR}/results"
   rm -f /tmp/kc-patroni-lab-update.log /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 }
 
-apply_api_manifest() {
-  local cp_node
-
+apply_database_manifests() {
+  local cp_node worker
   cp_node="$(controlplane_node)"
+  worker="$(worker_node)"
 
   cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -69,9 +48,80 @@ metadata:
   name: ${K8S_NAMESPACE}
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: patroni
+  namespace: ${K8S_NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: patroni-dcs
+  namespace: ${K8S_NAMESPACE}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps", "endpoints", "pods", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: patroni-dcs
+  namespace: ${K8S_NAMESPACE}
+subjects:
+  - kind: ServiceAccount
+    name: patroni
+    namespace: ${K8S_NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: patroni-dcs
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${DB_CLUSTER}-config
+  namespace: ${K8S_NAMESPACE}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    application: ${DB_APP_LABEL}
+    cluster-name: ${DB_CLUSTER}
+  ports:
+    - name: postgresql
+      port: ${DB_PORT}
+      targetPort: ${DB_PORT}
+    - name: patroni
+      port: 8008
+      targetPort: 8008
+---
+# Patroni Kubernetes DCS keeps the leader endpoint; it replaces standalone etcd here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${DB_CLUSTER}
+  namespace: ${K8S_NAMESPACE}
+spec:
+  ports:
+    - name: postgresql
+      port: ${DB_PORT}
+      targetPort: ${DB_PORT}
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: ${DB_CLUSTER}
+  namespace: ${K8S_NAMESPACE}
+  labels:
+    application: ${DB_APP_LABEL}
+    cluster-name: ${DB_CLUSTER}
+subsets: []
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: tat-api-code
+  name: ${API_DEPLOYMENT}-code
   namespace: ${K8S_NAMESPACE}
 data:
   server.py: |
@@ -80,67 +130,77 @@ data:
     import socket
     import time
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from psycopg2.pool import ThreadedConnectionPool
 
     PORT = int(os.environ.get("PORT", "8080"))
-    SLEEP_MS = float(os.environ.get("SLEEP_MS", "2.5"))
+    pool = ThreadedConnectionPool(
+        1, 64,
+        host=os.environ["DB_HOST"], port=int(os.environ.get("DB_PORT", "5432")),
+        dbname=os.environ.get("DB_NAME", "postgres"),
+        user=os.environ["DB_USER"], password=os.environ["DB_PASSWORD"],
+        connect_timeout=3, application_name="tat-api")
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
-
-        def _write_json(self, status_code, payload):
+        def _reply(self, status, payload):
             body = json.dumps(payload).encode()
-            self.send_response(status_code)
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Connection", "close")
             self.end_headers()
             self.wfile.write(body)
-
         def log_message(self, fmt, *args):
             return
-
         def do_GET(self):
             started = time.perf_counter()
-            if self.path == "/healthz":
-                self._write_json(200, {"status": "ok", "host": socket.gethostname()})
+            if self.path not in ("/healthz", "/txn"):
+                self._reply(404, {"status": "not-found"})
                 return
+            conn = None
+            try:
+                conn = pool.getconn()
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1") if self.path == "/healthz" else cur.execute(
+                        "INSERT INTO api_requests DEFAULT VALUES RETURNING id")
+                    row = cur.fetchone()
+                if self.path == "/txn":
+                    conn.commit()
+                else:
+                    conn.rollback()
+                elapsed = round((time.perf_counter() - started) * 1000, 3)
+                self._reply(200, {"status": "ok", "host": socket.gethostname(),
+                                  "id": row[0] if self.path == "/txn" else None,
+                                  "service_time_ms": elapsed})
+            except Exception as exc:
+                if conn is not None:
+                    conn.rollback()
+                self._reply(503, {"status": "database-error", "error": str(exc)[:160]})
+            finally:
+                if conn is not None:
+                    pool.putconn(conn)
 
-            if self.path.startswith("/txn"):
-                if SLEEP_MS > 0:
-                    time.sleep(SLEEP_MS / 1000.0)
-
-                elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
-                self._write_json(
-                    200,
-                    {
-                        "status": "ok",
-                        "host": socket.gethostname(),
-                        "service_time_ms": elapsed_ms,
-                    },
-                )
-                return
-
-            self._write_json(404, {"status": "not-found"})
-
-    if __name__ == "__main__":
-        server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-        server.serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${API_DEPLOYMENT}
+  name: db-primary
   namespace: ${K8S_NAMESPACE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ${API_APP_LABEL}
+      cluster-name: ${DB_CLUSTER}
+      member-name: primary
   template:
     metadata:
       labels:
-        app: ${API_APP_LABEL}
+        application: ${DB_APP_LABEL}
+        cluster-name: ${DB_CLUSTER}
+        member-name: primary
     spec:
+      serviceAccountName: patroni
       nodeSelector:
         kubernetes.io/hostname: ${cp_node}
       tolerations:
@@ -153,72 +213,232 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       containers:
-        - name: api
-          image: python:3.12-slim
+        - name: postgres
+          image: ${DB_IMAGE}
           imagePullPolicy: IfNotPresent
-          command: ["python", "/app/server.py"]
           env:
-            - name: PORT
-              value: "${API_PORT}"
-            - name: SLEEP_MS
-              value: "2.5"
+            - {name: SCOPE, value: "${DB_CLUSTER}"}
+            - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
+            - {name: DCS_ENABLE_KUBERNETES_API, value: "true"}
+            - {name: PATRONI_KUBERNETES_USE_ENDPOINTS, value: "true"}
+            - {name: PATRONI_KUBERNETES_PORTS, value: '[{"name":"postgresql","port":5432}]'}
+            - {name: PATRONI_KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
+            - {name: PATRONI_KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
+            - {name: PATRONI_KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
+            - {name: PATRONI_KUBERNETES_FOLLOWER_LABEL_VALUE, value: "${DB_STANDBY_LABEL}"}
+            - {name: KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
+            - {name: PATRONI_KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
+            - {name: KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
+            - {name: KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
+            - {name: KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
+            - {name: PATRONI_NAME, value: primary}
+            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: PATRONI_KUBERNETES_POD_IP, value: "$(POD_IP)"}
+            - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
+            - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "$(POD_IP):5432"}
+            - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "$(POD_IP):8008"}
+            - {name: PATRONI_REPLICATION_USERNAME, value: standby}
+            - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
+            - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
+            - {name: PATRONI_SUPERUSER_PASSWORD, value: "${DB_SUPERUSER_PASSWORD}"}
+            - {name: PGPASSWORD_SUPERUSER, value: "${DB_SUPERUSER_PASSWORD}"}
+            - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
+            - name: SPILO_CONFIGURATION
+              value: >-
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":["auth-host","md5"],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
-            - containerPort: ${API_PORT}
-          readinessProbe:
-            httpGet:
-              path: ${API_HEALTH_PATH}
-              port: ${API_PORT}
-            initialDelaySeconds: 2
-            periodSeconds: 2
-          livenessProbe:
-            httpGet:
-              path: ${API_HEALTH_PATH}
-              port: ${API_PORT}
-            initialDelaySeconds: 5
-            periodSeconds: 5
-          resources:
-            requests:
-              cpu: 100m
-              memory: 96Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
+            - {name: postgresql, containerPort: 5432, hostPort: 5432}
+            - {name: patroni, containerPort: 8008, hostPort: 8008}
           volumeMounts:
-            - name: code
-              mountPath: /app
+            - {name: data, mountPath: /home/postgres/pgdata}
+          readinessProbe:
+            httpGet: {path: /health, port: 8008}
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1500m", memory: 1536Mi}
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-standby
+  namespace: ${K8S_NAMESPACE}
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      cluster-name: ${DB_CLUSTER}
+      member-name: standby
+  template:
+    metadata:
+      labels:
+        application: ${DB_APP_LABEL}
+        cluster-name: ${DB_CLUSTER}
+        member-name: standby
+    spec:
+      serviceAccountName: patroni
+      nodeSelector:
+        kubernetes.io/hostname: ${worker}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: postgres
+          image: ${DB_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: SCOPE, value: "${DB_CLUSTER}"}
+            - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
+            - {name: DCS_ENABLE_KUBERNETES_API, value: "true"}
+            - {name: PATRONI_KUBERNETES_USE_ENDPOINTS, value: "true"}
+            - {name: PATRONI_KUBERNETES_PORTS, value: '[{"name":"postgresql","port":5432}]'}
+            - {name: PATRONI_KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
+            - {name: PATRONI_KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
+            - {name: PATRONI_KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
+            - {name: PATRONI_KUBERNETES_FOLLOWER_LABEL_VALUE, value: "${DB_STANDBY_LABEL}"}
+            - {name: KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
+            - {name: PATRONI_KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
+            - {name: KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
+            - {name: KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
+            - {name: KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
+            - {name: PATRONI_NAME, value: standby}
+            - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: PATRONI_KUBERNETES_POD_IP, value: "$(POD_IP)"}
+            - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
+            - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "$(POD_IP):5432"}
+            - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "$(POD_IP):8008"}
+            - {name: PATRONI_REPLICATION_USERNAME, value: standby}
+            - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
+            - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
+            - {name: PATRONI_SUPERUSER_PASSWORD, value: "${DB_SUPERUSER_PASSWORD}"}
+            - {name: PGPASSWORD_SUPERUSER, value: "${DB_SUPERUSER_PASSWORD}"}
+            - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
+            - name: SPILO_CONFIGURATION
+              value: >-
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":["auth-host","md5"],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+          ports:
+            - {name: postgresql, containerPort: 5432, hostPort: 5432}
+            - {name: patroni, containerPort: 8008, hostPort: 8008}
+          volumeMounts:
+            - {name: data, mountPath: /home/postgres/pgdata}
+          readinessProbe:
+            httpGet: {path: /health, port: 8008}
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: "1500m", memory: 1536Mi}
+      volumes:
+        - name: data
+          emptyDir: {}
+EOF
+}
+
+apply_api_deployment() {
+  local cp_node
+  cp_node="$(controlplane_node)"
+  kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${API_DEPLOYMENT}
+  namespace: ${K8S_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: ${API_APP_LABEL}}
+  template:
+    metadata:
+      labels: {app: ${API_APP_LABEL}}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: ${cp_node}}
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+        - {key: node-role.kubernetes.io/master, operator: Exists, effect: NoSchedule}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: api
+          image: ${DB_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["python3", "-u", "/app/server.py"]
+          env:
+            - {name: PORT, value: "${API_PORT}"}
+            - {name: DB_HOST, value: "${DB_SERVICE}.${K8S_NAMESPACE}.svc.cluster.local"}
+            - {name: DB_PORT, value: "${DB_PORT}"}
+            - {name: DB_NAME, value: "${DB_NAME}"}
+            - {name: DB_USER, value: "${DB_APP_USER}"}
+            - {name: DB_PASSWORD, value: "${DB_APP_PASSWORD}"}
+          ports: [{containerPort: ${API_PORT}}]
+          readinessProbe:
+            httpGet: {path: ${API_HEALTH_PATH}, port: ${API_PORT}}
+            periodSeconds: 3
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 750m, memory: 512Mi}
+          volumeMounts: [{name: code, mountPath: /app}]
       volumes:
         - name: code
-          configMap:
-            name: tat-api-code
+          configMap: {name: ${API_DEPLOYMENT}-code}
 EOF
 }
 
 log "Installing host dependencies"
 apt-get update
-apt-get install -y --no-install-recommends curl jq nftables ca-certificates procps sysstat python3
+apt-get install -y --no-install-recommends curl jq nftables ca-certificates procps sysstat python3 openssh-client
 
 wait_for_nodes_ready
 cleanup_previous
-
-log "Recording cluster topology"
+log "Recording node placement"
 printf '%s\n' "$(controlplane_node)" >"${LAB_RUNTIME_DIR}/controlplane_node"
 printf '%s\n' "$(worker_node)" >"${LAB_RUNTIME_DIR}/worker_node"
 printf '%s\n' "$(controlplane_ip)" >"${LAB_RUNTIME_DIR}/controlplane_ip"
 printf '%s\n' "$(worker_ip)" >"${LAB_RUNTIME_DIR}/worker_ip"
 
-log "Deploying API pod on controlplane"
-apply_api_manifest
-kubectl rollout status -n "$K8S_NAMESPACE" deployment/"$API_DEPLOYMENT" --timeout=180s >/dev/null
+log "Creating Patroni cluster with Kubernetes as its DCS"
+apply_database_manifests
+kubectl rollout status -n "$K8S_NAMESPACE" deployment/db-primary --timeout=300s >/dev/null
+kubectl scale -n "$K8S_NAMESPACE" deployment/db-standby --replicas=1 >/dev/null
+kubectl rollout status -n "$K8S_NAMESPACE" deployment/db-standby --timeout=300s >/dev/null
 
-for _ in $(seq 1 30); do
-  if api_healthy; then
+log "Waiting for synchronous replication"
+ready=0
+for _ in $(seq 1 120); do
+  primary="$(db_primary_pod_name 2>/dev/null || true)"
+  standby="$(db_standby_pod_name 2>/dev/null || true)"
+  if [[ -n "$primary" && -n "$standby" ]] && kctl exec "$primary" -- psql -U postgres -d postgres -Atqc "SELECT count(*) FROM pg_stat_replication WHERE state='streaming' AND sync_state='sync'" 2>/dev/null | grep -qx 1; then
+    ready=1
     break
   fi
+  sleep 3
+done
+if (( ready == 0 )); then
+  echo "Patroni synchronous standby did not become ready" >&2
+  exit 1
+fi
+
+log "Creating the API transaction table"
+primary="$(db_primary_pod_name)"
+kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
+  'CREATE TABLE IF NOT EXISTS api_requests (id bigserial PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())' >/dev/null
+kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
+  "GRANT INSERT ON TABLE api_requests TO ${DB_APP_USER}; GRANT USAGE, SELECT ON SEQUENCE api_requests_id_seq TO ${DB_APP_USER};" >/dev/null
+
+log "Deploying API on the primary node"
+apply_api_deployment
+kubectl rollout status -n "$K8S_NAMESPACE" deployment/"$API_DEPLOYMENT" --timeout=180s >/dev/null
+for _ in $(seq 1 30); do
+  if api_healthy; then break; fi
   sleep 2
 done
-
 api_healthy
-run_root nft delete table inet "$NFT_TABLE" >/dev/null 2>&1 || true
+nft_delete_from_all_nodes
 rm -f "$UPDATE_MARKER"
-
 log "Lab is ready"

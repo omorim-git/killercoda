@@ -55,6 +55,26 @@ latest_logs() {
   fi
   echo
 
+  echo "== Database pod descriptions =="
+  kubectl describe pod -n "$K8S_NAMESPACE" -l "cluster-name=${DB_CLUSTER}" || true
+  echo
+
+  echo "== Database container logs =="
+  for pod in $(kctl get pods -l "cluster-name=${DB_CLUSTER}" -o name 2>/dev/null); do
+    echo "--- ${pod} ---"
+    kctl logs "$pod" --all-containers --tail=120 2>&1 || true
+  done
+  echo
+
+  echo "== Standby node current CPU snapshot (not load-window average) =="
+  standby_node="$(db_standby_node 2>/dev/null || true)"
+  if [[ -n "$standby_node" ]]; then
+    ssh -o BatchMode=yes -o ConnectTimeout=3 "$standby_node" 'vmstat 1 3; ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 12' 2>&1 || true
+  else
+    echo "Standby node not found"
+  fi
+  echo
+
   echo "== Recent namespace events =="
   kubectl get events -n "$K8S_NAMESPACE" --sort-by=.lastTimestamp | tail -n 40 || true
   echo
