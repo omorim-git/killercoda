@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 if [[ $EUID -ne 0 ]]; then
   exec sudo -E bash "$(readlink -f "$0")" "$@"
@@ -23,7 +23,12 @@ dump_failure_context() {
     kubectl logs -n "$K8S_NAMESPACE" deploy/"$API_DEPLOYMENT" --tail=100 >&2 || true
   fi
 }
-trap dump_failure_context ERR
+on_error() {
+  local status=$? line="$1" command="$2"
+  echo "[install] ERROR: line ${line}: ${command} (exit=${status})" >&2
+  dump_failure_context
+}
+trap 'on_error "$LINENO" "$BASH_COMMAND"' ERR
 
 wait_for_nodes_ready() {
   log "Waiting for the two Kubernetes nodes"
@@ -69,12 +74,15 @@ cleanup_previous() {
 
 apply_database_manifests() {
   local cp_node worker cp_ip worker_ip
+  log "Resolving Kubernetes node names and IP addresses"
   cp_node="$(controlplane_node)"
   worker="$(worker_node)"
   cp_ip="$(node_internal_ip "$cp_node")"
   worker_ip="$(node_internal_ip "$worker")"
+  log "Using controlplane=${cp_node} (${cp_ip}), worker=${worker} (${worker_ip})"
+  log "Applying Kubernetes resources (request timeout: 30s)"
 
-  cat <<EOF | kubectl apply -f -
+  cat <<EOF | kubectl apply --request-timeout=30s -f -
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -342,6 +350,7 @@ spec:
         - name: data
           emptyDir: {}
 EOF
+  log "Kubernetes resources applied"
 }
 
 apply_api_deployment() {

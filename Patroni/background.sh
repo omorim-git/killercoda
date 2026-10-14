@@ -17,9 +17,12 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-if ! bash "$INSTALL_SCRIPT" >"$LOG_FILE" 2>&1; then
+if bash "$INSTALL_SCRIPT" >"$LOG_FILE" 2>&1; then
+  touch /tmp/background-finished
+else
+  status=$?
+  printf '[bootstrap] install-lab.sh exited with status %s at %s\n' \
+    "$status" "$(date -Is)" >>"$LOG_FILE"
   touch "$FAIL_FILE"
   exit 1
 fi
-
-touch /tmp/background-finished
