@@ -206,7 +206,7 @@ data:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     from psycopg2.pool import ThreadedConnectionPool
 
-    PORT = int(os.environ.get("PORT", "8080"))
+    PORT = int(os.environ.get("PORT", "18080"))
     pool = ThreadedConnectionPool(
         1, 64,
         host=os.environ["DB_HOST"], port=int(os.environ.get("DB_PORT", "5432")),
@@ -283,8 +283,7 @@ spec:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirst
       serviceAccountName: patroni
       containers:
         - name: postgres
@@ -298,10 +297,12 @@ spec:
             - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
             - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: PATRONI_KUBERNETES_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
-            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${cp_ip}:5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "\$(POD_IP):5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
-            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "${cp_ip}:8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "\$(POD_IP):8008"}
             - {name: PATRONI_REPLICATION_USERNAME, value: standby}
             - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
             - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
@@ -310,10 +311,10 @@ spec:
             - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
             - name: SPILO_CONFIGURATION
               value: >-
-                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}]},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}]},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local replication standby trust","local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
-            - {name: postgresql, containerPort: 5432, hostPort: 5432}
-            - {name: patroni, containerPort: 8008, hostPort: 8008}
+            - {name: postgresql, containerPort: 5432}
+            - {name: patroni, containerPort: 8008}
           volumeMounts:
             - {name: data, mountPath: /home/postgres/pgdata}
           readinessProbe:
@@ -347,8 +348,7 @@ spec:
     spec:
       nodeSelector:
         kubernetes.io/hostname: ${worker}
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+      dnsPolicy: ClusterFirst
       serviceAccountName: patroni
       containers:
         - name: postgres
@@ -362,10 +362,12 @@ spec:
             - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
             - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+            - {name: PATRONI_KUBERNETES_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
-            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${worker_ip}:5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "\$(POD_IP):5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
-            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "${worker_ip}:8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "\$(POD_IP):8008"}
             - {name: PATRONI_REPLICATION_USERNAME, value: standby}
             - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
             - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
@@ -374,10 +376,10 @@ spec:
             - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
             - name: SPILO_CONFIGURATION
               value: >-
-                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}]},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}]},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local replication standby trust","local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
-            - {name: postgresql, containerPort: 5432, hostPort: 5432}
-            - {name: patroni, containerPort: 8008, hostPort: 8008}
+            - {name: postgresql, containerPort: 5432}
+            - {name: patroni, containerPort: 8008}
           volumeMounts:
             - {name: data, mountPath: /home/postgres/pgdata}
           readinessProbe:
