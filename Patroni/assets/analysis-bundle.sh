@@ -9,6 +9,9 @@ mkdir -p "$results_dir"
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 outfile="${results_dir}/${timestamp}-analysis-bundle.txt"
+published_file="${ARTIFACT_DIR}/$(basename "$outfile")"
+
+ensure_artifact_server || true
 
 latest_logs() {
   find "$results_dir" -maxdepth 1 -name '*.log' ! -name '*.resources.log' -type f | sort
@@ -39,6 +42,23 @@ latest_logs() {
   kubectl get jobs -n "$K8S_NAMESPACE" -o wide || true
   echo
 
+  echo "== API pod details =="
+  kubectl describe pod -n "$K8S_NAMESPACE" -l app=tat-api || true
+  echo
+
+  echo "== API previous container logs =="
+  api_pod="$(api_pod_name 2>/dev/null || true)"
+  if [[ -n "$api_pod" ]]; then
+    kubectl logs -n "$K8S_NAMESPACE" "$api_pod" --previous 2>&1 || true
+  else
+    echo "API Pod not found"
+  fi
+  echo
+
+  echo "== Recent namespace events =="
+  kubectl get events -n "$K8S_NAMESPACE" --sort-by=.lastTimestamp | tail -n 40 || true
+  echo
+
   echo "== host sockets =="
   ss -s || true
   echo
@@ -60,6 +80,10 @@ latest_logs() {
     fi
     echo
   done
-} | tee "$outfile"
+} >"$outfile" 2>&1
+
+cp "$outfile" "$published_file"
 
 echo "Saved: $outfile"
+echo "Published: $published_file"
+echo "ブラウザーのファイル一覧から、この .txt ファイルを開いてダウンロードしてください。"

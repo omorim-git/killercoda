@@ -4,6 +4,8 @@ set -euo pipefail
 LAB_NAME="kc-patroni-lab"
 LAB_RUNTIME_DIR="/var/lib/${LAB_NAME}"
 LAB_HOME_DIR="${HOME}/kc-patroni-lab"
+ARTIFACT_DIR="${LAB_RUNTIME_DIR}/graphs"
+ARTIFACT_PORT="8090"
 
 K8S_NAMESPACE="tat-lab"
 API_DEPLOYMENT="tat-api"
@@ -82,6 +84,29 @@ api_pod_node() {
 
 api_healthy() {
   curl -fsS --max-time 3 "$(api_health_url)" >/dev/null
+}
+
+ensure_artifact_server() {
+  local script_dir
+  local attempt
+
+  mkdir -p "$ARTIFACT_DIR"
+  if curl -fsS --max-time 1 "http://127.0.0.1:${ARTIFACT_PORT}/" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  nohup python3 "${script_dir}/artifact-server.py" --directory "$ARTIFACT_DIR" --port "$ARTIFACT_PORT" \
+    >/tmp/kc-patroni-artifact-http.log 2>&1 </dev/null &
+  for attempt in $(seq 1 10); do
+    if curl -fsS --max-time 1 "http://127.0.0.1:${ARTIFACT_PORT}/" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  echo "artifact HTTP server did not start; see /tmp/kc-patroni-artifact-http.log" >&2
+  return 1
 }
 
 nft_table_exists() {
