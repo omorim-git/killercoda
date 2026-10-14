@@ -264,7 +264,7 @@ spec:
             - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
             - name: SPILO_CONFIGURATION
               value: >-
-                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
             - {name: postgresql, containerPort: 5432, hostPort: 5432}
             - {name: patroni, containerPort: 8008, hostPort: 8008}
@@ -325,7 +325,7 @@ spec:
             - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
             - name: SPILO_CONFIGURATION
               value: >-
-                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
             - {name: postgresql, containerPort: 5432, hostPort: 5432}
             - {name: patroni, containerPort: 8008, hostPort: 8008}
