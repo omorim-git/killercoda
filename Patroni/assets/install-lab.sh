@@ -15,8 +15,15 @@ dump_failure_context() {
   echo "== nodes / pods ==" >&2
   kubectl get nodes -o wide >&2 || true
   kubectl get pods -n "$K8S_NAMESPACE" -o wide >&2 || true
+  kubectl describe pods -n "$K8S_NAMESPACE" >&2 || true
   kubectl get endpoints -n "$K8S_NAMESPACE" >&2 || true
-  kubectl logs -n "$K8S_NAMESPACE" -l "cluster-name=${DB_CLUSTER}" --all-containers --tail=100 >&2 || true
+  echo "== Patroni service-account permissions ==" >&2
+  for resource in endpoints configmaps pods services; do
+    kubectl auth can-i get "$resource" -n "$K8S_NAMESPACE" --as="system:serviceaccount:${K8S_NAMESPACE}:patroni" >&2 || true
+    kubectl auth can-i list "$resource" -n "$K8S_NAMESPACE" --as="system:serviceaccount:${K8S_NAMESPACE}:patroni" >&2 || true
+    kubectl auth can-i watch "$resource" -n "$K8S_NAMESPACE" --as="system:serviceaccount:${K8S_NAMESPACE}:patroni" >&2 || true
+  done
+  kubectl logs -n "$K8S_NAMESPACE" -l "cluster-name=${DB_CLUSTER}" --all-containers --tail=300 >&2 || true
   kubectl logs -n "$K8S_NAMESPACE" deploy/"$API_DEPLOYMENT" --tail=100 >&2 || true
 }
 trap dump_failure_context ERR
@@ -25,6 +32,32 @@ wait_for_nodes_ready() {
   log "Waiting for the two Kubernetes nodes"
   kubectl wait --for=condition=Ready node --all --timeout=180s >/dev/null
   [[ -n "$(worker_node)" ]] || { echo "worker node not found" >&2; exit 1; }
+}
+
+wait_for_deployment() {
+  local name="$1" expected="$2" timeout="$3" start now ready pods selector
+  case "$name" in
+    db-primary) selector="member-name=primary" ;;
+    db-standby) selector="member-name=standby" ;;
+    *) selector="app=${API_APP_LABEL}" ;;
+  esac
+  start="$(date +%s)"
+  while true; do
+    ready="$(kubectl get deployment "$name" -n "$K8S_NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+    if [[ "$ready" == "$expected" ]]; then
+      log "${name} is ready (${ready}/${expected})"
+      return 0
+    fi
+    now="$(date +%s)"
+    if (( now - start >= timeout )); then
+      echo "Timed out waiting for ${name} after ${timeout}s (ready=${ready:-0}/${expected})" >&2
+      return 1
+    fi
+    pods="$(kubectl get pods -n "$K8S_NAMESPACE" -l "$selector" \
+      -o custom-columns='NAME:.metadata.name,READY:.status.containerStatuses[0].ready,PHASE:.status.phase,REASON:.status.containerStatuses[0].state.waiting.reason' --no-headers 2>/dev/null | tr '\n' ';' || true)"
+    log "Waiting for ${name}: ${now-start}s elapsed; ready=${ready:-0}/${expected}; ${pods:-pod not created yet}"
+    sleep 10
+  done
 }
 
 cleanup_previous() {
@@ -82,19 +115,12 @@ kind: Service
 metadata:
   name: ${DB_CLUSTER}-config
   namespace: ${K8S_NAMESPACE}
+  labels:
+    application: ${DB_APP_LABEL}
+    cluster-name: ${DB_CLUSTER}
 spec:
   clusterIP: None
   publishNotReadyAddresses: true
-  selector:
-    application: ${DB_APP_LABEL}
-    cluster-name: ${DB_CLUSTER}
-  ports:
-    - name: postgresql
-      port: ${DB_PORT}
-      targetPort: ${DB_PORT}
-    - name: patroni
-      port: 8008
-      targetPort: 8008
 ---
 # Patroni Kubernetes DCS keeps the leader endpoint; it replaces standalone etcd here.
 apiVersion: v1
@@ -233,12 +259,12 @@ spec:
             - {name: KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
             - {name: PATRONI_NAME, value: primary}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
-            - {name: PATRONI_KUBERNETES_POD_IP, value: "$(POD_IP)"}
+            - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
-            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "$(POD_IP):5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "\$(POD_IP):5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
-            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "$(POD_IP):8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "\$(POD_IP):8008"}
             - {name: PATRONI_REPLICATION_USERNAME, value: standby}
             - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
             - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
@@ -308,12 +334,12 @@ spec:
             - {name: KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
             - {name: PATRONI_NAME, value: standby}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
-            - {name: PATRONI_KUBERNETES_POD_IP, value: "$(POD_IP)"}
+            - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
-            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "$(POD_IP):5432"}
+            - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "\$(POD_IP):5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
-            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "$(POD_IP):8008"}
+            - {name: PATRONI_RESTAPI_CONNECT_ADDRESS, value: "\$(POD_IP):8008"}
             - {name: PATRONI_REPLICATION_USERNAME, value: standby}
             - {name: PATRONI_REPLICATION_PASSWORD, value: "${DB_REPLICATION_PASSWORD}"}
             - {name: PATRONI_SUPERUSER_USERNAME, value: postgres}
@@ -404,9 +430,9 @@ printf '%s\n' "$(worker_ip)" >"${LAB_RUNTIME_DIR}/worker_ip"
 
 log "Creating Patroni cluster with Kubernetes as its DCS"
 apply_database_manifests
-kubectl rollout status -n "$K8S_NAMESPACE" deployment/db-primary --timeout=300s >/dev/null
+wait_for_deployment db-primary 1 300
 kubectl scale -n "$K8S_NAMESPACE" deployment/db-standby --replicas=1 >/dev/null
-kubectl rollout status -n "$K8S_NAMESPACE" deployment/db-standby --timeout=300s >/dev/null
+wait_for_deployment db-standby 1 300
 
 log "Waiting for synchronous replication"
 ready=0
@@ -433,7 +459,7 @@ kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
 
 log "Deploying API on the primary node"
 apply_api_deployment
-kubectl rollout status -n "$K8S_NAMESPACE" deployment/"$API_DEPLOYMENT" --timeout=180s >/dev/null
+wait_for_deployment "$API_DEPLOYMENT" 1 180
 for _ in $(seq 1 30); do
   if api_healthy; then break; fi
   sleep 2
