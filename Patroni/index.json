@@ -18,9 +18,8 @@
         "background": "inject-trouble.sh"
       },
       {
-        "title": "解答例と復旧手順を確認する",
-        "text": "step3.md",
-        "verify": "verify-step3.sh"
+        "title": "worker側CPUを追加採取して調査ログを準備する",
+        "text": "step3.md"
       }
     ],
     "finish": {
