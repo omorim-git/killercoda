@@ -93,6 +93,36 @@ kind: Namespace
 metadata:
   name: ${K8S_NAMESPACE}
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: patroni
+  namespace: ${K8S_NAMESPACE}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: patroni-pod-labels
+  namespace: ${K8S_NAMESPACE}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: patroni-pod-labels
+  namespace: ${K8S_NAMESPACE}
+subjects:
+  - kind: ServiceAccount
+    name: patroni
+    namespace: ${K8S_NAMESPACE}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: patroni-pod-labels
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -255,6 +285,7 @@ spec:
           effect: NoSchedule
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: patroni
       containers:
         - name: postgres
           image: ${DB_IMAGE}
@@ -263,7 +294,9 @@ spec:
             - {name: SCOPE, value: "${DB_CLUSTER}"}
             - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
             - {name: ETCD3_HOSTS, value: "${worker_ip}:2379"}
-            - {name: PATRONI_NAME, value: primary}
+            - {name: PATRONI_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
             - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${cp_ip}:5432"}
@@ -277,7 +310,7 @@ spec:
             - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
             - name: SPILO_CONFIGURATION
               value: >-
-                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}]},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
             - {name: postgresql, containerPort: 5432, hostPort: 5432}
             - {name: patroni, containerPort: 8008, hostPort: 8008}
@@ -316,6 +349,7 @@ spec:
         kubernetes.io/hostname: ${worker}
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: patroni
       containers:
         - name: postgres
           image: ${DB_IMAGE}
@@ -324,7 +358,9 @@ spec:
             - {name: SCOPE, value: "${DB_CLUSTER}"}
             - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
             - {name: ETCD3_HOSTS, value: "${worker_ip}:2379"}
-            - {name: PATRONI_NAME, value: standby}
+            - {name: PATRONI_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAME, valueFrom: {fieldRef: {fieldPath: metadata.name}}}
+            - {name: POD_NAMESPACE, valueFrom: {fieldRef: {fieldPath: metadata.namespace}}}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
             - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${worker_ip}:5432"}
@@ -338,7 +374,7 @@ spec:
             - {name: PGPASSWORD_STANDBY, value: "${DB_REPLICATION_PASSWORD}"}
             - name: SPILO_CONFIGURATION
               value: >-
-                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}],"users":{"${DB_APP_USER}":{"password":"${DB_APP_PASSWORD}","options":["createdb"]}}},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
+                {"bootstrap":{"dcs":{"synchronous_mode":true,"synchronous_mode_strict":true,"synchronous_node_count":1,"postgresql":{"parameters":{"synchronous_commit":"on"}}},"initdb":[{"auth-host":"md5"},{"auth-local":"trust"}]},"postgresql":{"parameters":{"synchronous_commit":"on"},"pg_hba":["local all postgres trust","host all all 0.0.0.0/0 md5","host replication standby 0.0.0.0/0 md5"]}}
           ports:
             - {name: postgresql, containerPort: 5432, hostPort: 5432}
             - {name: patroni, containerPort: 8008, hostPort: 8008}
@@ -423,6 +459,7 @@ log "Creating etcd DCS and PostgreSQL pods"
 apply_database_manifests
 wait_for_deployment kc-etcd 1 180
 wait_for_deployment db-primary 1 300
+primary="$(db_primary_pod_name)"
 kubectl scale -n "$K8S_NAMESPACE" deployment/db-standby --replicas=1 >/dev/null
 wait_for_deployment db-standby 1 300
 
@@ -442,8 +479,11 @@ if (( ready == 0 )); then
   exit 1
 fi
 
+log "Creating the API database role"
+kctl exec "$primary" -- psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c \
+  "CREATE ROLE ${DB_APP_USER} WITH LOGIN CREATEDB PASSWORD '${DB_APP_PASSWORD}'" >/dev/null
+
 log "Creating the API transaction table"
-primary="$(db_primary_pod_name)"
 kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
   'CREATE TABLE IF NOT EXISTS api_requests (id bigserial PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())' >/dev/null
 kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
