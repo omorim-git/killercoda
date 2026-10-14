@@ -5,7 +5,7 @@
 対象は `kubernetes-kubeadm-2nodes` 環境の次の構成です。
 
 - `controlplane`: Web/API と PostgreSQL Primary が動くサーバー。Kubernetes の管理機能も動いています
-- `node01`: PostgreSQL Standby と負荷試験ツール k6 が動くサーバー
+- `node01`: PostgreSQL Standby、クラスタ状態を管理する etcd、負荷試験ツール k6 が動くサーバー
 - PostgreSQL は Patroni で管理し、Primary の更新を Standby に同期レプリケーションします
 - API はリクエストごとにDBへ書き込み、COMMIT完了後に応答します
 - `k6`: API に繰り返しリクエストを送り、応答時間や失敗率を測るツール

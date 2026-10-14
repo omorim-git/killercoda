@@ -96,11 +96,11 @@ api_pod_node() {
 }
 
 db_primary_pod_name() {
-  kctl get pod -l "cluster-name=${DB_CLUSTER},${DB_ROLE_LABEL}=${DB_PRIMARY_LABEL}" -o jsonpath='{.items[0].metadata.name}'
+  kctl get pod -l "cluster-name=${DB_CLUSTER},member-name=primary" -o jsonpath='{.items[0].metadata.name}'
 }
 
 db_standby_pod_name() {
-  kctl get pod -l "cluster-name=${DB_CLUSTER},${DB_ROLE_LABEL}=${DB_STANDBY_LABEL}" -o jsonpath='{.items[0].metadata.name}'
+  kctl get pod -l "cluster-name=${DB_CLUSTER},member-name=standby" -o jsonpath='{.items[0].metadata.name}'
 }
 
 db_pod_node() {

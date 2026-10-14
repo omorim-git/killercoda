@@ -17,14 +17,11 @@ dump_failure_context() {
   kubectl get pods -n "$K8S_NAMESPACE" -o wide >&2 || true
   kubectl describe pods -n "$K8S_NAMESPACE" >&2 || true
   kubectl get endpoints -n "$K8S_NAMESPACE" >&2 || true
-  echo "== Patroni service-account permissions ==" >&2
-  for resource in endpoints configmaps pods services; do
-    kubectl auth can-i get "$resource" -n "$K8S_NAMESPACE" --as="system:serviceaccount:${K8S_NAMESPACE}:patroni" >&2 || true
-    kubectl auth can-i list "$resource" -n "$K8S_NAMESPACE" --as="system:serviceaccount:${K8S_NAMESPACE}:patroni" >&2 || true
-    kubectl auth can-i watch "$resource" -n "$K8S_NAMESPACE" --as="system:serviceaccount:${K8S_NAMESPACE}:patroni" >&2 || true
-  done
   kubectl logs -n "$K8S_NAMESPACE" -l "cluster-name=${DB_CLUSTER}" --all-containers --tail=300 >&2 || true
-  kubectl logs -n "$K8S_NAMESPACE" deploy/"$API_DEPLOYMENT" --tail=100 >&2 || true
+  kubectl logs -n "$K8S_NAMESPACE" deploy/kc-etcd --all-containers --tail=100 >&2 || true
+  if kubectl get deployment "$API_DEPLOYMENT" -n "$K8S_NAMESPACE" >/dev/null 2>&1; then
+    kubectl logs -n "$K8S_NAMESPACE" deploy/"$API_DEPLOYMENT" --tail=100 >&2 || true
+  fi
 }
 trap dump_failure_context ERR
 
@@ -37,6 +34,7 @@ wait_for_nodes_ready() {
 wait_for_deployment() {
   local name="$1" expected="$2" timeout="$3" start now ready pods selector
   case "$name" in
+    kc-etcd) selector="app=kc-etcd" ;;
     db-primary) selector="member-name=primary" ;;
     db-standby) selector="member-name=standby" ;;
     *) selector="app=${API_APP_LABEL}" ;;
@@ -82,37 +80,59 @@ kind: Namespace
 metadata:
   name: ${K8S_NAMESPACE}
 ---
-apiVersion: v1
-kind: ServiceAccount
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: patroni
+  name: kc-etcd
   namespace: ${K8S_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: kc-etcd}
+  template:
+    metadata:
+      labels: {app: kc-etcd, cluster-name: ${DB_CLUSTER}}
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: ${worker}
+      tolerations:
+        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+        - {key: node-role.kubernetes.io/master, operator: Exists, effect: NoSchedule}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      containers:
+        - name: etcd
+          image: quay.io/coreos/etcd:v3.5.21
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/etcd"]
+          args:
+            - --name=kc-etcd
+            - --data-dir=/var/lib/etcd
+            - --listen-client-urls=http://0.0.0.0:2379
+            - --advertise-client-urls=http://${worker_ip}:2379
+            - --listen-peer-urls=http://0.0.0.0:2380
+            - --initial-advertise-peer-urls=http://${worker_ip}:2380
+            - --initial-cluster=kc-etcd=http://${worker_ip}:2380
+            - --initial-cluster-state=new
+          ports:
+            - {name: client, containerPort: 2379}
+          readinessProbe:
+            tcpSocket: {port: 2379}
+            periodSeconds: 3
+          livenessProbe:
+            tcpSocket: {port: 2379}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/etcd}
+      volumes:
+        - name: data
+          emptyDir: {}
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: patroni-dcs
-  namespace: ${K8S_NAMESPACE}
-rules:
-  - apiGroups: [""]
-    resources: ["configmaps", "endpoints", "pods", "services"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: patroni-dcs
-  namespace: ${K8S_NAMESPACE}
-subjects:
-  - kind: ServiceAccount
-    name: patroni
-    namespace: ${K8S_NAMESPACE}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: patroni-dcs
----
-# Patroni stores cluster state in ConfigMaps; this Service routes clients to the Primary Pod.
+# Route API traffic to the fixed Primary Pod in this two-node exercise.
 apiVersion: v1
 kind: Service
 metadata:
@@ -123,8 +143,7 @@ metadata:
     cluster-name: ${DB_CLUSTER}
 spec:
   selector:
-    cluster-name: ${DB_CLUSTER}
-    ${DB_ROLE_LABEL}: ${DB_PRIMARY_LABEL}
+    member-name: primary
   ports:
     - name: postgresql
       port: ${DB_PORT}
@@ -212,7 +231,6 @@ spec:
         cluster-name: ${DB_CLUSTER}
         member-name: primary
     spec:
-      serviceAccountName: patroni
       nodeSelector:
         kubernetes.io/hostname: ${cp_node}
       tolerations:
@@ -231,21 +249,9 @@ spec:
           env:
             - {name: SCOPE, value: "${DB_CLUSTER}"}
             - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
-            - {name: DCS_ENABLE_KUBERNETES_API, value: "true"}
-            - {name: KUBERNETES_USE_CONFIGMAPS, value: "true"}
-            - {name: PATRONI_KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
-            - {name: PATRONI_KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
-            - {name: PATRONI_KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
-            - {name: PATRONI_KUBERNETES_FOLLOWER_LABEL_VALUE, value: "${DB_STANDBY_LABEL}"}
-            - {name: KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
-            - {name: PATRONI_KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
-            - {name: KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
-            - {name: KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
-            - {name: KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
+            - {name: ETCD3_HOSTS, value: "${worker_ip}:2379"}
             - {name: PATRONI_NAME, value: primary}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
-            - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
-            - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
             - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${cp_ip}:5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
@@ -293,7 +299,6 @@ spec:
         cluster-name: ${DB_CLUSTER}
         member-name: standby
     spec:
-      serviceAccountName: patroni
       nodeSelector:
         kubernetes.io/hostname: ${worker}
       hostNetwork: true
@@ -305,21 +310,9 @@ spec:
           env:
             - {name: SCOPE, value: "${DB_CLUSTER}"}
             - {name: PATRONI_SCOPE, value: "${DB_CLUSTER}"}
-            - {name: DCS_ENABLE_KUBERNETES_API, value: "true"}
-            - {name: KUBERNETES_USE_CONFIGMAPS, value: "true"}
-            - {name: PATRONI_KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
-            - {name: PATRONI_KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
-            - {name: PATRONI_KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
-            - {name: PATRONI_KUBERNETES_FOLLOWER_LABEL_VALUE, value: "${DB_STANDBY_LABEL}"}
-            - {name: KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
-            - {name: PATRONI_KUBERNETES_SCOPE_LABEL, value: "cluster-name"}
-            - {name: KUBERNETES_LABELS, value: '{"application":"${DB_APP_LABEL}","cluster-name":"${DB_CLUSTER}"}'}
-            - {name: KUBERNETES_ROLE_LABEL, value: "${DB_ROLE_LABEL}"}
-            - {name: KUBERNETES_LEADER_LABEL_VALUE, value: "${DB_PRIMARY_LABEL}"}
+            - {name: ETCD3_HOSTS, value: "${worker_ip}:2379"}
             - {name: PATRONI_NAME, value: standby}
             - {name: POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
-            - {name: PATRONI_KUBERNETES_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
-            - {name: PATRONI_KUBERNETES_NAMESPACE, value: "${K8S_NAMESPACE}"}
             - {name: PATRONI_POSTGRESQL_LISTEN, value: "0.0.0.0:5432"}
             - {name: PATRONI_POSTGRESQL_CONNECT_ADDRESS, value: "${worker_ip}:5432"}
             - {name: PATRONI_RESTAPI_LISTEN, value: "0.0.0.0:8008"}
@@ -412,8 +405,9 @@ printf '%s\n' "$(worker_node)" >"${LAB_RUNTIME_DIR}/worker_node"
 printf '%s\n' "$(controlplane_ip)" >"${LAB_RUNTIME_DIR}/controlplane_ip"
 printf '%s\n' "$(worker_ip)" >"${LAB_RUNTIME_DIR}/worker_ip"
 
-log "Creating Patroni cluster with Kubernetes as its DCS"
+log "Creating etcd DCS and PostgreSQL pods"
 apply_database_manifests
+wait_for_deployment kc-etcd 1 180
 wait_for_deployment db-primary 1 300
 kubectl scale -n "$K8S_NAMESPACE" deployment/db-standby --replicas=1 >/dev/null
 wait_for_deployment db-standby 1 300
