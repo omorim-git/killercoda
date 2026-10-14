@@ -33,6 +33,27 @@ kubectl get events -n tat-lab --sort-by=.lastTimestamp | tail -n 40
 
 負荷中のリソースはcontrolplaneで自動採取されます。CPU、メモリ、ディスク読書量を正常時と比較してください。Standbyとk6 runnerはnode01を共有するため、必要ならworker側の状態も確認してください。
 
+workerへは controlplane から SSH 接続できます。まずノード名を取得して接続し、`exit` で controlplane に戻ります。
+
+```bash
+source ~/kc-patroni-lab/lib.sh
+WORKER="$(worker_node)"
+printf 'worker=%s\n' "$WORKER"
+ssh "$WORKER"
+```
+
+worker上では、CPU・メモリ・上位プロセスなどを確認できます。`vmstat`の最初のデータ行は起動後からの平均なので、以降の1秒間隔の行を負荷中の値として見てください。
+
+```bash
+hostname
+LC_ALL=C vmstat -w 1 5
+free -h
+ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 12
+exit
+```
+
+Step3では、k6実行中のworker CPUを時系列で記録し、controlplaneの自動採取結果と合わせて追加分析できるようにします。
+
 [CPU使用率グラフ画像の一覧を開く]({{TRAFFIC_HOST1_8090}}/)
 
 解析のヒント:
@@ -45,34 +66,10 @@ kubectl get events -n tat-lab --sort-by=.lastTimestamp | tail -n 40
 - アプリケーション、OS、通信経路、負荷生成条件を候補にし、観測結果から優先順位を付ける
 - 一度に変更する項目を一つに絞り、変更前後の測定結果と反証も残す
 
-生成AI（LLM）に調査を手伝わせる場合は、次のコマンドで保存済みの測定ログと時刻付きリソース記録を1つのファイルにまとめます。現在の状態も別見出しで収録するため、負荷中の記録と区別して読んでください。内容は端末に流さず、保存先だけを表示します。
-
-```bash
-~/kc-patroni-lab/analysis-bundle.sh
-```
-
-作成後、上の「CPU使用率グラフ画像の一覧」リンクを開き、`*-analysis-bundle.txt` を選択してダウンロードしてください。ファイルには環境情報やログが含まれるため、外部のLLMへ渡す前に機密情報がないことを確認してください。
-
-生成AIに渡す依頼文の例:
-
-```text
-以下は Kubernetes の2台のサーバーを使った演習環境のログです。
-利用者から API が遅いという問い合わせがありました。原因は未特定です。
-
-やってほしいこと:
-1. 観測できた事実と仮説、情報不足を区別する
-2. 原因候補を優先度順に挙げ、それぞれの根拠と反証方法を示す
-3. 次に確認すべき読み取り専用コマンドを 5 個以内で、対象ノードと確認目的付きで提案する
-4. 復旧案を出す場合は、影響範囲、元に戻す方法、改善の検証方法を示す
-
-ログ:
-<作成された調査用ログファイルの内容を貼る>
-```
-
 演習準備のエラー表示が出た場合は、次の準備完了・失敗ファイルを確認してください。完了ファイルがなければkillercodaを開きなおしてみてください。
 
 ```bash
 ls -l /tmp/kc-patroni-lab-update.failed /tmp/kc-patroni-lab-update.finished
 ```
 
-次のステップでは、原因の確認方法と復旧方法の解答例を示します。
+次のステップでは、追加の観測結果とLLMに渡す調査ログを準備します。原因の解説と復旧判断はこの手順では行わず、別途検討します。

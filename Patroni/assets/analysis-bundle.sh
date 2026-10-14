@@ -14,7 +14,12 @@ published_file="${ARTIFACT_DIR}/$(basename "$outfile")"
 ensure_artifact_server || true
 
 latest_logs() {
-  find "$results_dir" -maxdepth 1 -name '*.log' ! -name '*.resources.log' -type f | sort
+  find "$results_dir" -maxdepth 1 -name '*.log' ! -name '*.resources.log' \
+    ! -name 'worker-*.vmstat.log' -type f | sort
+}
+
+latest_worker_logs() {
+  find "$results_dir" -maxdepth 1 -name 'worker-*.vmstat.log' -type f | sort
 }
 
 {
@@ -72,6 +77,19 @@ latest_logs() {
     ssh -o BatchMode=yes -o ConnectTimeout=3 "$standby_node" 'vmstat 1 3; ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 12' 2>&1 || true
   else
     echo "Standby node not found"
+  fi
+  echo
+
+  echo "== Worker CPU samples captured during benchmark =="
+  worker_logs="$(latest_worker_logs)"
+  if [[ -n "$worker_logs" ]]; then
+    while IFS= read -r file; do
+      [[ -n "$file" ]] || continue
+      echo "--- ${file} ---"
+      cat "$file" || true
+    done <<<"$worker_logs"
+  else
+    echo "No worker vmstat logs found"
   fi
   echo
 
