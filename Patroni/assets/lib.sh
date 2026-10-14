@@ -62,13 +62,15 @@ worker_node() {
   local cp
 
   cp="$(controlplane_node)"
-  kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -vx "$cp" | head -n 1
+  kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' |
+    awk -v cp="$cp" '$0 != cp && !found {print; found=1}'
 }
 
 node_internal_ip() {
   local node="$1"
 
-  kubectl get node "$node" -o jsonpath='{range .status.addresses[*]}{.type}{"="}{.address}{"\n"}{end}' | awk -F= '$1=="InternalIP" {print $2; exit}'
+  kubectl get node "$node" -o jsonpath='{range .status.addresses[*]}{.type}{"="}{.address}{"\n"}{end}' |
+    awk -F= '$1=="InternalIP" && !found {print $2; found=1}'
 }
 
 controlplane_ip() {
@@ -202,19 +204,19 @@ extract_k6_stat() {
 extract_k6_failed_rate() {
   local file="$1"
 
-  sed -n 's/.*http_req_failed.*: *\([^ ]*\).*/\1/p' "$file" | head -n 1
+  sed -n 's/.*http_req_failed.*: *\([^ ]*\).*/\1/p' "$file" | awk 'NR == 1 {print; found=1} END {if (!found) exit 0}'
 }
 
 extract_k6_dropped_iterations() {
   local file="$1"
 
-  sed -n 's/.*dropped_iterations.*: *\([0-9][0-9]*\).*/\1/p' "$file" | head -n 1
+  sed -n 's/.*dropped_iterations.*: *\([0-9][0-9]*\).*/\1/p' "$file" | awk 'NR == 1 {print; found=1} END {if (!found) exit 0}'
 }
 
 extract_k6_http_reqs_rate() {
   local file="$1"
 
-  sed -n 's/.*http_reqs.*: *[0-9][0-9]* *\([^ ]*\/s\).*/\1/p' "$file" | head -n 1
+  sed -n 's/.*http_reqs.*: *[0-9][0-9]* *\([^ ]*\/s\).*/\1/p' "$file" | awk 'NR == 1 {print; found=1} END {if (!found) exit 0}'
 }
 
 duration_to_ms() {
@@ -259,5 +261,5 @@ duration_to_ms() {
 find_latest_result() {
   local label="$1"
 
-  ls -1t "${LAB_HOME_DIR}/results/"*-"${label}".log 2>/dev/null | head -n 1
+  ls -1t "${LAB_HOME_DIR}/results/"*-"${label}".log 2>/dev/null | awk 'NR == 1 {print; found=1} END {if (!found) exit 0}'
 }

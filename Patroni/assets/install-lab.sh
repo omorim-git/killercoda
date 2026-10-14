@@ -14,6 +14,10 @@ log() { echo "[install] $*"; }
 dump_failure_context() {
   echo "== nodes / pods ==" >&2
   kubectl get nodes -o wide >&2 || true
+  if ! kubectl get namespace "$K8S_NAMESPACE" >/dev/null 2>&1; then
+    echo "Namespace ${K8S_NAMESPACE} was not created; skipping namespaced diagnostics" >&2
+    return 0
+  fi
   kubectl get pods -n "$K8S_NAMESPACE" -o wide >&2 || true
   kubectl describe pods -n "$K8S_NAMESPACE" >&2 || true
   kubectl get endpoints -n "$K8S_NAMESPACE" >&2 || true
@@ -25,6 +29,7 @@ dump_failure_context() {
 }
 on_error() {
   local status=$? line="$1" command="$2"
+  trap - ERR
   echo "[install] ERROR: line ${line}: ${command} (exit=${status})" >&2
   dump_failure_context
 }
