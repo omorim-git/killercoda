@@ -31,15 +31,33 @@ kubectl get events -n tat-lab --sort-by=.lastTimestamp | tail -n 40
 ~/kc-patroni-lab/analysis-bundle.sh
 ```
 
+調査ログは次のファイル一覧から取得できます。CPUグラフのほか、測定ログやanalysis bundleも表示されます。
+
+[調査ファイル一覧を開く]({{TRAFFIC_HOST1_8090}}/)
+
+ここまでの結果をLLMに渡し、Step3で追加観測する前の暫定分析を行ってください。原因を断定したり、復旧手順を求めたりせず、観測事実・仮説・不足情報を整理します。Step3でworker側CPUログを加えた後、同じ分析を更新します。
+
+```text
+以下は、APIの性能劣化を調査している2ノードKubernetes演習環境の現時点のログです。
+これは追加のworker CPU記録を取得する前の暫定分析です。原因の解説や設定変更・復旧手順は提示せず、観測事実と仮説を整理してください。
+
+依頼:
+1. ログから直接確認できる事実、考えられる仮説、判断できない点を分ける
+2. 正常時と劣化時の応答時間、p95、失敗率、dropped_iterations、CPU・メモリ・ディスク・Pod状態を関連付ける
+3. 相関だけで原因と断定せず、現時点で有力な仮説とその根拠・反証材料を示す
+4. 仮説を区別するためにworker側で追加採取すべき情報を、取得コマンドと確認目的付きで提案する
+5. 次のStep3でworker CPUの時系列を追加した後、分析をどう更新すべきか示す
+
+ログ:
+<analysis-bundle.txtの内容>
+```
+
 負荷中のリソースはcontrolplaneで自動採取されます。CPU、メモリ、ディスク読書量を正常時と比較してください。Standbyとk6 runnerはnode01を共有するため、必要ならworker側の状態も確認してください。
 
 workerへは controlplane から SSH 接続できます。まずノード名を取得して接続し、`exit` で controlplane に戻ります。
 
 ```bash
-source ~/kc-patroni-lab/lib.sh
-WORKER="$(worker_node)"
-printf 'worker=%s\n' "$WORKER"
-ssh "$WORKER"
+ssh node01
 ```
 
 worker上では、CPU・メモリ・上位プロセスなどを確認できます。`vmstat`の最初のデータ行は起動後からの平均なので、以降の1秒間隔の行を負荷中の値として見てください。
