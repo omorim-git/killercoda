@@ -13,9 +13,9 @@ fi
 results_dir="${LAB_HOME_DIR}/results"
 mkdir -p "$results_dir"
 stamp="$(date +%Y%m%d-%H%M%S)"
-worker_log="${results_dir}/worker-after-update-${stamp}.vmstat.log"
+worker_log="${results_dir}/worker-after-update-${stamp}.procstat.log"
 
-ssh node01 'LC_ALL=C vmstat -w 1' >"$worker_log" 2>&1 &
+ssh node01 'while :; do printf "TIME "; date -Is; awk '\''/^cpu([0-9]+)? / {print}'\'' /proc/stat; sleep 1; done' >"$worker_log" 2>&1 &
 monitor_pid=$!
 cleanup() {
   kill "$monitor_pid" 2>/dev/null || true

@@ -1,15 +1,14 @@
 # まとめ
 
-今回の原因は、PostgreSQL Standby側の `nftables` に大量の照合ルールが設定され、PrimaryからStandbyへのレプリケーション通信の処理が重くなったことです。
+原因の解説はこのページでは行いません。Step2・Step3で集めた証拠を使い、別途の解説打ち合わせに向けて仮説と根拠を整理してください。
 
-APIは各リクエストでDB更新を行い、同期レプリケーションのCOMMIT確認を待ってから応答します。そのため、DB間通信が遅くなるとAPI宛てのHTTP通信に直接ルールを追加していなくても応答時間が延びます。
+解析のヒント:
 
-観測できたはずの兆候:
-
-- APIとDB Primaryはcontrolplane、DB Standbyとk6はnode01で動いている
-- API は動作継続している
-- `http_req_failed` は低いまま
-- それでも `http_req_duration` が大きく悪化する
-- node01上で `nft list table inet kc_tat_lab` を実行すると大量の照合ルールを確認できる
+- 正常時と劣化時で、同じ負荷レートにおける平均・p95・失敗率・`dropped_iterations`を比較する
+- APIの応答完了までにDB処理や同期確認がどう関係するか、アプリケーションの処理経路を確認する
+- controlplaneとworkerの配置およびCPU記録を、k6実行時間に合わせて比較する。workerにはStandbyとk6 runnerの両方がある
+- CPU全体の使用率だけでなく、user/system/irq/softirq、CPUごとの差、アイドル時間、I/O待ちを確認する
+- CPU使用率だけでは説明できない遅延について、DB状態、ノード間通信、カーネル処理の追加証拠が必要か検討する
+- 仮説ごとに支持する証拠、反証材料、未確認事項を分け、観測事実だけで原因を断定しない
 
 このKillercodaシナリオは2ノード構成のため、Standbyとk6 runnerは同じworkerを共有します。実環境で負荷発生源の影響を分離する場合は、負荷生成用サーバーを別に用意してください。

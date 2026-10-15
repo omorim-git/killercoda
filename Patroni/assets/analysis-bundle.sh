@@ -15,11 +15,11 @@ ensure_artifact_server || true
 
 latest_logs() {
   find "$results_dir" -maxdepth 1 -name '*.log' ! -name '*.resources.log' \
-    ! -name 'worker-*.vmstat.log' -type f | sort
+    ! -name 'worker-*.procstat.log' -type f | sort
 }
 
 latest_worker_logs() {
-  find "$results_dir" -maxdepth 1 -name 'worker-*.vmstat.log' -type f | sort
+  find "$results_dir" -maxdepth 1 -name 'worker-*.procstat.log' -type f | sort
 }
 
 {
@@ -80,7 +80,7 @@ latest_worker_logs() {
   fi
   echo
 
-  echo "== Worker CPU samples captured during benchmark =="
+  echo "== Worker per-CPU counters captured during benchmark (/proc/stat) =="
   worker_logs="$(latest_worker_logs)"
   if [[ -n "$worker_logs" ]]; then
     while IFS= read -r file; do
@@ -89,7 +89,7 @@ latest_worker_logs() {
       cat "$file" || true
     done <<<"$worker_logs"
   else
-    echo "No worker vmstat logs found"
+    echo "No worker /proc/stat logs found"
   fi
   echo
 
