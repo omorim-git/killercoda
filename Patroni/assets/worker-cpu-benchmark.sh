@@ -16,6 +16,7 @@ for rate in "${rates[@]}"; do
   fi
 done
 
+worker="$(worker_node)"
 mkdir -p "${LAB_HOME_DIR}/results" "$ARTIFACT_DIR"
 overall_status=0
 
@@ -37,8 +38,8 @@ for rate in "${rates[@]}"; do
   }
   trap cleanup_monitor EXIT
 
-  echo "[worker-cpu] rate=${rate}/s; starting node01 per-CPU sampling"
-  ssh node01 'while :; do printf "TIME "; date +%s.%N; grep "^cpu" /proc/stat; sleep 1; done' >"$worker_log" 2>&1 &
+  echo "[worker-cpu] rate=${rate}/s; sampling worker=${worker} via ssh ${worker}"
+  ssh "$worker" 'printf "HOSTNAME "; hostname -s; while :; do printf "TIME "; date +%s.%N; grep "^cpu" /proc/stat; sleep 1; done' >"$worker_log" 2>&1 &
   remote_monitor_pid=$!
   sleep 2
 
@@ -53,14 +54,14 @@ for rate in "${rates[@]}"; do
     continue
   fi
 
-  if ! python3 "${SCRIPT_DIR}/collect-worker-cpu.py" "$worker_log" "$result_log" "$worker_graph" >"$worker_summary"; then
-    echo "[worker-cpu] failed to build node01 CPU graph for ${label}" >&2
+  if ! python3 "${SCRIPT_DIR}/collect-worker-cpu.py" "$worker_log" "$result_log" "$worker_graph" "$worker" >"$worker_summary"; then
+    echo "[worker-cpu] failed to validate worker source or build CPU graph for ${label}" >&2
     overall_status=1
     continue
   fi
   cp "$worker_graph" "$published_graph"
   cat "$worker_summary"
-  echo "node01 CPU graph: $published_graph"
+  echo "${worker} CPU graph: $published_graph"
   echo "node01 CPU samples: $worker_log"
   if (( benchmark_status != 0 )); then
     overall_status=1

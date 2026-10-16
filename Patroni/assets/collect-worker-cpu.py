@@ -24,7 +24,7 @@ def samples_from(path):
     return result
 
 
-def write_svg(rows, path):
+def write_svg(rows, path, hostname):
     width, height = 960, 460
     left, right, top, bottom = 72, 24, 58, 76
     plot_width, plot_height = width - left - right, height - top - bottom
@@ -37,7 +37,7 @@ def write_svg(rows, path):
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<rect width="100%" height="100%" fill="#fff"/>',
         '<style>text{font-family:Arial,sans-serif;fill:#263238}.grid{stroke:#d9e0e5;stroke-width:1}.axis{stroke:#59666f;stroke-width:1.5}</style>',
-        '<text x="72" y="28" font-size="19" font-weight="bold">node01 CPU utilization during load</text>',
+        f'<text x="72" y="28" font-size="19" font-weight="bold">{hostname} CPU utilization during load</text>',
         '<text x="72" y="46" font-size="12">All logical CPUs; busy, user, system, IRQ and SoftIRQ</text>',
     ]
     for level in range(0, 101, 20):
@@ -62,7 +62,13 @@ def write_svg(rows, path):
     Path(path).write_text("\n".join(parts), encoding="utf-8")
 
 
-sample_path, benchmark_path, graph_path = sys.argv[1:4]
+sample_path, benchmark_path, graph_path, expected_host = sys.argv[1:5]
+sample_text = Path(sample_path).read_text(errors="replace")
+hostnames = re.findall(r"^HOSTNAME (.+)$", sample_text, re.MULTILINE)
+if not hostnames:
+    sys.exit("No remote HOSTNAME marker in worker CPU log")
+if any(host != expected_host for host in hostnames):
+    sys.exit(f"SSH target mismatch: expected {expected_host}, observed {', '.join(sorted(set(hostnames)))}")
 benchmark = Path(benchmark_path).read_text(errors="replace")
 starts = re.findall(r"RESOURCE_START=(\d+)", benchmark)
 ends = re.findall(r"RESOURCE_END=(\d+)", benchmark)
@@ -89,9 +95,9 @@ for (old_ts, old), (ts, current) in zip(samples, samples[1:]):
     })
 if not rows:
     sys.exit("No node01 CPU samples overlap the benchmark window")
-write_svg(rows, graph_path)
+write_svg(rows, graph_path, expected_host)
 weight = sum(row["interval"] for row in rows)
 for key, name in (("busy", "CPU total"), ("user", "user"), ("system", "system"), ("irq", "irq"), ("softirq", "softirq")):
     mean = sum(row[key] * row["interval"] for row in rows) / weight
     print(f"node01 resource_summary: {name} average={mean:.1f}% max={max(row[key] for row in rows):.1f}%")
-print(f"node01 resource_summary: samples={len(rows)} graph={graph_path}")
+print(f"worker resource_summary: host={expected_host} samples={len(rows)} graph={graph_path}")

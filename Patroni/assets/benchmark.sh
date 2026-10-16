@@ -25,7 +25,7 @@ job_created=0
 resource_pid=""
 benchmark_status=0
 resource_file="${outfile%.log}.resources.jsonl"
-graph_file="${outfile%.log}-cpu.svg"
+graph_file="${outfile%.log}-controlplane-cpu.svg"
 graph_latest="${ARTIFACT_DIR}/latest.svg"
 
 ensure_artifact_server || true
