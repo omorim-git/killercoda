@@ -489,7 +489,7 @@ log "Creating the API transaction table"
 kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
   'CREATE TABLE IF NOT EXISTS api_requests (id bigserial PRIMARY KEY, created_at timestamptz NOT NULL DEFAULT now())' >/dev/null
 kctl exec "$primary" -- psql -U postgres -d "$DB_NAME" -v ON_ERROR_STOP=1 -c \
-  "GRANT INSERT ON TABLE api_requests TO ${DB_APP_USER}; GRANT USAGE, SELECT ON SEQUENCE api_requests_id_seq TO ${DB_APP_USER};" >/dev/null
+  "GRANT INSERT, SELECT ON TABLE api_requests TO ${DB_APP_USER}; GRANT USAGE, SELECT ON SEQUENCE api_requests_id_seq TO ${DB_APP_USER};" >/dev/null
 
 log "Deploying API on the primary node"
 apply_api_deployment
