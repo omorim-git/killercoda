@@ -4,30 +4,68 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib.sh"
 
-rate="${1:-50}"
-if [[ ! "$rate" =~ ^[0-9]+$ ]] || (( rate < 1 )); then
-  echo "Usage: $0 [positive-rate]" >&2
-  exit 2
+if (( $# == 0 )); then
+  rates=(30 40 50 75 100)
+else
+  rates=("$@")
 fi
+for rate in "${rates[@]}"; do
+  if [[ ! "$rate" =~ ^[0-9]+$ ]] || (( rate < 1 )); then
+    echo "Usage: $0 [positive-rate ...]" >&2
+    exit 2
+  fi
+done
 
-results_dir="${LAB_HOME_DIR}/results"
-mkdir -p "$results_dir"
-stamp="$(date +%Y%m%d-%H%M%S)"
-worker_log="${results_dir}/worker-after-update-${stamp}.procstat.log"
+mkdir -p "${LAB_HOME_DIR}/results" "$ARTIFACT_DIR"
+overall_status=0
 
-ssh node01 'while :; do printf "TIME "; date -Is; awk '\''/^cpu([0-9]+)? / {print}'\'' /proc/stat; sleep 1; done' >"$worker_log" 2>&1 &
-monitor_pid=$!
-cleanup() {
-  kill "$monitor_pid" 2>/dev/null || true
-  wait "$monitor_pid" 2>/dev/null || true
-}
-trap cleanup EXIT
+for rate in "${rates[@]}"; do
+  label="after-update-worker-${rate}"
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  worker_log="${LAB_HOME_DIR}/results/worker-${label}-${stamp}.procstat.log"
+  worker_summary="${LAB_HOME_DIR}/results/worker-${label}-${stamp}.summary.txt"
+  worker_graph="${LAB_HOME_DIR}/results/${stamp}-${label}-node01-cpu.svg"
+  published_graph="${ARTIFACT_DIR}/$(basename "$worker_graph")"
+  remote_monitor_pid=""
 
-sleep 2
-set +e
-"${SCRIPT_DIR}/benchmark.sh" after-update-worker "$rate"
-benchmark_status=$?
-set -e
+  cleanup_monitor() {
+    if [[ -n "$remote_monitor_pid" ]]; then
+      kill "$remote_monitor_pid" 2>/dev/null || true
+      wait "$remote_monitor_pid" 2>/dev/null || true
+      remote_monitor_pid=""
+    fi
+  }
+  trap cleanup_monitor EXIT
 
-printf 'worker_cpu_log: %s\n' "$worker_log"
-exit "$benchmark_status"
+  echo "[worker-cpu] rate=${rate}/s; starting node01 per-CPU sampling"
+  ssh node01 'while :; do printf "TIME "; date +%s.%N; grep "^cpu" /proc/stat; sleep 1; done' >"$worker_log" 2>&1 &
+  remote_monitor_pid=$!
+  sleep 2
+
+  benchmark_status=0
+  "${SCRIPT_DIR}/benchmark.sh" "$label" "$rate" || benchmark_status=$?
+  cleanup_monitor
+
+  result_log="$(find_latest_result "$label")"
+  if [[ -z "$result_log" ]]; then
+    echo "[worker-cpu] benchmark log not found for ${label}" >&2
+    overall_status=1
+    continue
+  fi
+
+  if ! python3 "${SCRIPT_DIR}/collect-worker-cpu.py" "$worker_log" "$result_log" "$worker_graph" >"$worker_summary"; then
+    echo "[worker-cpu] failed to build node01 CPU graph for ${label}" >&2
+    overall_status=1
+    continue
+  fi
+  cp "$worker_graph" "$published_graph"
+  cat "$worker_summary"
+  echo "node01 CPU graph: $published_graph"
+  echo "node01 CPU samples: $worker_log"
+  if (( benchmark_status != 0 )); then
+    overall_status=1
+  fi
+done
+
+trap - EXIT
+exit "$overall_status"

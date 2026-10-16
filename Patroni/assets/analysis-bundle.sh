@@ -85,6 +85,11 @@ latest_worker_logs() {
   if [[ -n "$worker_logs" ]]; then
     while IFS= read -r file; do
       [[ -n "$file" ]] || continue
+      summary="${file%.procstat.log}.summary.txt"
+      if [[ -f "$summary" ]]; then
+        echo "--- ${summary} ---"
+        cat "$summary" || true
+      fi
       echo "--- ${file} ---"
       cat "$file" || true
     done <<<"$worker_logs"

@@ -1,12 +1,14 @@
 # 追加調査データを集める
 
-Step2で確認した同じ負荷レートを使い、k6実行中のworker側CPUを1秒間隔で記録します。次のコマンドはcontrolplane上で実行してください。内部で`ssh node01`を使い、worker CPUの記録とk6実行を行います。workerのCPU記録にはStandbyとk6 runnerの両方の負荷が含まれます。
+Step2と同じ負荷レートで再測定し、各負荷中のcontrolplaneとnode01両方のCPUグラフを取得します。次のコマンドはcontrolplane上で実行してください。引数を省略すると30/40/50/75/100 req/sを順に測定します。各rateのcontrolplaneグラフはbenchmarkが生成し、node01はk6実行時間中のCPUカウンターを1秒ごとに記録して内訳付きグラフを生成します。node01にはStandbyとk6 runnerの両方があるため、その合算負荷です。
 
 ```bash
-~/kc-patroni-lab/worker-cpu-benchmark.sh 100
+~/kc-patroni-lab/worker-cpu-benchmark.sh
 ```
 
-`100`は例です。Step2で遅延や`dropped_iterations`が現れたレートに置き換え、正常時と同じ負荷条件で比較してください。`*.procstat.log`にはworkerの`/proc/stat`を1秒ごとにCPU別で記録します。各CPU行のカウンターは左からuser、nice、system、idle、iowait、irq、softirq、steal、guest、guest_niceの累積値です。連続する時刻の差分を比較し、CPUごとの処理内訳や割り込み処理の変化を確認します。
+rateを限定する場合は、必要な数値を複数指定します（例: `~/kc-patroni-lab/worker-cpu-benchmark.sh 50 75`）。各rateについてcontrolplaneとnode01それぞれのSVGがファイル一覧に保存されます。node01の生ログ`*.procstat.log`はCPU別の累積カウンター（user、nice、system、idle、iowait、irq、softirq、steal等）を含み、対応する`.summary.txt`には試験区間の全CPU平均を記録します。グラフはCPU total、user、system、IRQ、softirqの推移を示します。累積値そのものではなく、連続サンプル間の差分を比較してください。
+
+[負荷別CPUグラフと調査ファイルの一覧を開く]({{TRAFFIC_HOST1_8090}}/)
 
 ## LLMへ渡す調査ログ
 
@@ -16,7 +18,7 @@ Step2の分析bundleにworker CPUログを追加し、LLMに渡す調査ファ�
 ~/kc-patroni-lab/analysis-bundle.sh
 ```
 
-作成された`*-analysis-bundle.txt`を、CPUグラフ画像と同じファイル一覧からダウンロードしてください。bundleにはStep2の調査で保存した測定ファイルも含まれます。LLMへ渡す前に、ログ中に機密情報がないことを確認してください。
+作成された`*-analysis-bundle.txt`を、CPUグラフ画像と同じファイル一覧からダウンロードしてください。bundleにはStep2の調査で保存した測定ファイル、各rateのnode01 CPUサマリーと生ログも含まれます。LLMへ渡す前に、ログ中に機密情報がないことを確認してください。
 
 [調査ファイル一覧を開く]({{TRAFFIC_HOST1_8090}}/)
 
