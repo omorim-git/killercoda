@@ -30,7 +30,9 @@ DB_IMAGE="ghcr.io/zalando/spilo-17:4.0-p2"
 
 NFT_TABLE="kc_tat_lab"
 NFT_FORWARD_CHAIN="forward"
+NFT_INTERFACE_CHAIN="interface_gate"
 NFT_GUARD_CHAIN="replication_guard"
+NFT_SERVICE_CHAIN="service_guard"
 NFT_RULE_COUNT=50000
 UPDATE_MARKER="${LAB_RUNTIME_DIR}/update-applied"
 
@@ -160,7 +162,7 @@ nft_rule_count() {
     return 0
   fi
 
-  ssh -o BatchMode=yes -o ConnectTimeout=3 "$node" sudo nft list chain inet "$NFT_TABLE" "$NFT_GUARD_CHAIN" 2>/dev/null | awk '/ip saddr / {c++} END {print c+0}'
+  ssh -o BatchMode=yes -o ConnectTimeout=3 "$node" sudo nft list chain inet "$NFT_TABLE" "$NFT_GUARD_CHAIN" 2>/dev/null | awk '/ip saddr .* jump / {c++} END {print c+0}'
 }
 
 nft_delete_from_node() {
