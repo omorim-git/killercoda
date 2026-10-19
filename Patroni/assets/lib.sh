@@ -33,7 +33,7 @@ NFT_FORWARD_CHAIN="forward"
 NFT_INTERFACE_CHAIN="interface_gate"
 NFT_GUARD_CHAIN="replication_guard"
 NFT_SERVICE_CHAIN="service_guard"
-NFT_RULE_COUNT=50000
+NFT_RULE_COUNT=100000
 UPDATE_MARKER="${LAB_RUNTIME_DIR}/update-applied"
 
 run_root() {

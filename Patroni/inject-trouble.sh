@@ -23,11 +23,15 @@ while true; do
   sleep 1
 done
 
-if ! bash "$UPDATE_SCRIPT" >"$LOG_FILE" 2>&1; then
+if bash "$UPDATE_SCRIPT" >"$LOG_FILE" 2>&1; then
+  touch "$DONE_FILE"
+else
+  status=$?
+  printf '[update] apply-update.sh failed with status %s; see %s\n' "$status" "$LOG_FILE" >>"$LOG_FILE"
   touch "$FAIL_FILE"
-  exit 1
+  # Killercoda treats a non-zero background-step exit as a platform error popup.
+  # Keep the failure marker and log as the exercise's diagnostic signal instead.
+  exit 0
 fi
-
-touch "$DONE_FILE"
 sleep 1
 exit 0

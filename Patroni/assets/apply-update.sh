@@ -15,16 +15,6 @@ log() {
   echo "[update] $*"
 }
 
-rule_ip_for_index() {
-  local index="$1"
-  local address_number
-
-  # Spread exact addresses across 10/8 instead of using one contiguous interval.
-  address_number=$(( (index * 7919) % 16777214 + 1 ))
-
-  printf '10.%d.%d.%d' "$((address_number / 65536))" "$(((address_number / 256) % 256))" "$((address_number % 256))"
-}
-
 if [[ -f "$UPDATE_MARKER" ]]; then
   log "Update state has already been applied"
   exit 0
@@ -54,7 +44,13 @@ log "Generating nftables multi-chain rules (${NFT_RULE_COUNT} sparse source addr
   echo "  }"
   echo "  chain ${NFT_GUARD_CHAIN} {"
   for i in $(seq 1 "$NFT_RULE_COUNT"); do
-    printf '    ip saddr %s jump %s\n' "$(rule_ip_for_index "$i")" "$NFT_SERVICE_CHAIN"
+    # Spread exact addresses across 10/8 instead of using one contiguous interval.
+    address_number=$(( (i * 7919) % 16777214 + 1 ))
+    printf '    ip saddr 10.%d.%d.%d jump %s\n' \
+      "$((address_number / 65536))" \
+      "$(((address_number / 256) % 256))" \
+      "$((address_number % 256))" \
+      "$NFT_SERVICE_CHAIN"
   done
   echo "    accept"
   echo "  }"
