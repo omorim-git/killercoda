@@ -13,7 +13,8 @@ kubectl get nodes -o wide
 echo
 echo "== API and database pods =="
 kctl get pods -o wide
-if ! kctl get pods -o name | grep -Eq 'db-primary|db-standby|tat-api'; then
+pod_names="$(kctl get pods -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')"
+if [[ ! "$pod_names" =~ (db-primary|db-standby|tat-api) ]]; then
   echo "No database/API pods exist. Check /tmp/kc-patroni-lab-bootstrap.log and the bootstrap failed marker."
 fi
 echo

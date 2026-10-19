@@ -31,7 +31,11 @@ if (( ${#files[@]} == 0 )); then
     echo "No results directory: ${LAB_HOME_DIR}/results" >&2
     exit 1
   fi
-  mapfile -t files < <(ls -1t "${LAB_HOME_DIR}/results"/*.log 2>/dev/null | head -n 3)
+  mapfile -t files < <(
+    find "${LAB_HOME_DIR}/results" -maxdepth 1 -type f -name '*.log' \
+      ! -name 'worker-*.procstat.log' ! -name '*.resources.log' |
+      sort -r | head -n 3
+  )
 fi
 
 if (( ${#files[@]} == 0 )); then

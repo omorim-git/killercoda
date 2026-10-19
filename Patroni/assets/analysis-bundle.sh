@@ -19,7 +19,8 @@ latest_logs() {
 }
 
 latest_worker_logs() {
-  find "$results_dir" -maxdepth 1 -name 'worker-*.procstat.log' -type f | sort
+  find "$results_dir" -maxdepth 1 -name 'worker-*.procstat.log' -type f \
+    -printf '%T@ %p\n' | sort -n | cut -d' ' -f2-
 }
 
 {
@@ -27,11 +28,11 @@ latest_worker_logs() {
   "${SCRIPT_DIR}/cluster-status.sh" || true
   echo
 
-  echo "== compare-results =="
+  echo "== compare-results (latest three benchmark logs; excludes worker counter logs) =="
   "${SCRIPT_DIR}/compare-results.sh" || true
   echo
 
-  echo "== 現在の状態（負荷中の値ではありません） =="
+  echo "== Current resource snapshot (capture time only; not benchmark-window data) =="
   "${SCRIPT_DIR}/resource-status.sh" 1 5 || true
   echo
 
@@ -71,7 +72,7 @@ latest_worker_logs() {
   done
   echo
 
-  echo "== Standby node current CPU snapshot (not load-window average) =="
+  echo "== Standby node current CPU snapshot (capture time only; not benchmark-window data) =="
   standby_node="$(db_standby_node 2>/dev/null || true)"
   if [[ -n "$standby_node" ]]; then
     ssh -o BatchMode=yes -o ConnectTimeout=3 "$standby_node" 'vmstat 1 3; ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 12' 2>&1 || true
@@ -80,7 +81,7 @@ latest_worker_logs() {
   fi
   echo
 
-  echo "== Worker per-CPU counters captured during benchmark (/proc/stat) =="
+  echo "== Worker per-CPU counters captured during benchmarks (/proc/stat; chronological file order) =="
   worker_logs="$(latest_worker_logs)"
   if [[ -n "$worker_logs" ]]; then
     while IFS= read -r file; do
@@ -110,7 +111,7 @@ latest_worker_logs() {
   ps -eo pid,comm,%cpu,%mem,rss --sort=-%cpu | head -n 10 || true
   echo
 
-  echo "== latest benchmark logs =="
+  echo "== Saved benchmark logs (historical records in filename order; not current state) =="
   for file in $(latest_logs); do
     echo "--- ${file} ---"
     cat "$file" || true
